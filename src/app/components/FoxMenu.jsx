@@ -7,6 +7,7 @@ const IconTypographer = () => <svg viewBox="0 0 24 24" width="20" height="20" fi
 const IconCompressor = () => <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>;
 const IconScribe = () => <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>;
 const IconSketcher = () => <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle></svg>;
+const IconSleep = () => <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>;
 
 export default function FoxMenu({ onClose, onAction }) {
   const [hoveredLabel, setHoveredLabel] = useState('');
@@ -24,12 +25,13 @@ export default function FoxMenu({ onClose, onAction }) {
       <div className="mochi-board-content">
         <div className="mochi-fox-menu-inner">
           <div className="mochi-fox-menu-icons">
-            <button onMouseEnter={() => setHoveredLabel('The Sniffer')} onMouseLeave={() => setHoveredLabel('')} onClick={() => handleAction('FORAGER')}><IconForager /></button>
-            <button onMouseEnter={() => setHoveredLabel('The Scout')} onMouseLeave={() => setHoveredLabel('')} onClick={() => handleAction('SCOUT')}><IconScout /></button>
-            <button onMouseEnter={() => setHoveredLabel('The Designer')} onMouseLeave={() => setHoveredLabel('')} onClick={() => handleAction('TYPOGRAPHER')}><IconTypographer /></button>
-            <button onMouseEnter={() => setHoveredLabel('The Sketcher')} onMouseLeave={() => setHoveredLabel('')} onClick={() => handleAction('SKETCHER')}><IconSketcher /></button>
-            <button onMouseEnter={() => setHoveredLabel('The Compressor')} onMouseLeave={() => setHoveredLabel('')} onClick={() => handleAction('COMPRESSOR')}><IconCompressor /></button>
-            <button onMouseEnter={() => setHoveredLabel('The Scribe')} onMouseLeave={() => setHoveredLabel('')} onClick={() => handleAction('SCRIBE')}><IconScribe /></button>
+            <button onMouseEnter={() => setHoveredLabel('The Sniffer')} onMouseLeave={() => setHoveredLabel('')} onClick={() => handleAction('FORAGER')} title="The Sniffer"><IconForager /></button>
+            <button onMouseEnter={() => setHoveredLabel('The Scout')} onMouseLeave={() => setHoveredLabel('')} onClick={() => handleAction('SCOUT')} title="The Scout"><IconScout /></button>
+            <button onMouseEnter={() => setHoveredLabel('The Designer')} onMouseLeave={() => setHoveredLabel('')} onClick={() => handleAction('TYPOGRAPHER')} title="The Designer"><IconTypographer /></button>
+            <button onMouseEnter={() => setHoveredLabel('The Sketcher')} onMouseLeave={() => setHoveredLabel('')} onClick={() => handleAction('SKETCHER')} title="The Sketcher"><IconSketcher /></button>
+            <button onMouseEnter={() => setHoveredLabel('The Compressor')} onMouseLeave={() => setHoveredLabel('')} onClick={() => handleAction('COMPRESSOR')} title="The Compressor"><IconCompressor /></button>
+            <button onMouseEnter={() => setHoveredLabel('The Scribe')} onMouseLeave={() => setHoveredLabel('')} onClick={() => handleAction('SCRIBE')} title="The Scribe"><IconScribe /></button>
+            <button onMouseEnter={() => setHoveredLabel('Sleep (Alt+S)')} onMouseLeave={() => setHoveredLabel('')} onClick={() => handleAction('TOGGLE_SLEEP')} title="Put Nick to sleep (Alt+S)"><IconSleep /></button>
           </div>
           <div className="mochi-fox-menu-label">
             {hoveredLabel || 'What to do?'}

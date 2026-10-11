@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import './Character.css';
 import { useBlink, useSleep, useMouseTracking } from './character-animation';
 import FoxMenu from '../../../app/components/FoxMenu';
@@ -47,8 +47,49 @@ export default function Character({ movementState }) {
 
   const isSystemSleepingRef = useRef(isSystemSleeping);
 
+  const [wakeGreeting, setWakeGreeting] = useState('');
+  const [isManualSleep, setIsManualSleep] = useState(() => {
+    try {
+      return sessionStorage.getItem('nick_manual_sleep') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const wakeUp = useCallback(() => {
+    setIsManualSleep(false);
+    setIsSleeping(false);
+    try { sessionStorage.setItem('nick_manual_sleep', 'false'); } catch {}
+    setIsHappy(true);
+    setWakeGreeting("I'm awake! ✨");
+    setTimeout(() => setIsHappy(false), 1200);
+    setTimeout(() => setWakeGreeting(''), 2500);
+  }, []);
+
+  const putToSleep = useCallback(() => {
+    setIsManualSleep(true);
+    setIsSleeping(true);
+    try { sessionStorage.setItem('nick_manual_sleep', 'true'); } catch {}
+    setIsMenuOpen(false);
+    setActiveFeature(null);
+    setIsScribeOpen(false);
+    setWakeGreeting('');
+  }, []);
+
+  const toggleSleep = useCallback(() => {
+    if (isManualSleep || isSleeping) {
+      wakeUp();
+    } else {
+      putToSleep();
+    }
+  }, [isManualSleep, isSleeping, wakeUp, putToSleep]);
+
   React.useEffect(() => {
     isSystemSleepingRef.current = isSystemSleeping;
+    if (isManualSleep) {
+      setIsSleeping(true);
+      return;
+    }
     if (isSystemSleeping && !isListeningRef.current) {
       if (movementStateRef.current.mode === 'peeking') {
         movementStateRef.current.triggerTaskMode(() => {
@@ -68,10 +109,10 @@ export default function Character({ movementState }) {
     return () => {
       if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
     };
-  }, [isSystemSleeping]);
+  }, [isSystemSleeping, isManualSleep]);
   const { companionMessage, companionMood } = useCompanionship();
   const [isHovered, setIsHovered] = useState(false);
-  const [isHappy] = useState(false);
+  const [isHappy, setIsHappy] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isTakingScreenshot, setIsTakingScreenshot] = useState(false);
   const [screenshotDataUrl, setScreenshotDataUrl] = useState(null);
@@ -110,10 +151,7 @@ export default function Character({ movementState }) {
       setIsScribeOpen(false);
       setIsMenuOpen(false);
     } else if (action === 'TOGGLE_SLEEP') {
-      setActiveFeature(null);
-      setIsScribeOpen(false);
-      setIsMenuOpen(false);
-      setIsSleeping(prev => !prev);
+      toggleSleep();
     }
   };
 
@@ -146,6 +184,14 @@ export default function Character({ movementState }) {
         }
       }
       
+      // Shortcut to toggle sleep mode (Alt + S)
+      if (e.altKey && (e.code === 'KeyS' || e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.repeat) return;
+        toggleSleep();
+      }
+
       // Shortcut to call character back to den
       if (e.altKey && (e.code === 'KeyB' || e.key === 'b' || e.code === 'KeyC' || e.key === 'c')) {
         e.preventDefault();
@@ -299,7 +345,10 @@ export default function Character({ movementState }) {
       triggerTaskMode();
       return;
     }
-    if (isSleeping) return;
+    if (isManualSleep || isSleeping) {
+      wakeUp();
+      return;
+    }
 
     if (activeFeature) {
       setActiveFeature(null);
@@ -369,7 +418,7 @@ export default function Character({ movementState }) {
 
   return (
     <div
-      className="mochi-companion-container"
+      className={`mochi-companion-container ${isManualSleep ? 'mochi-asleep' : ''}`}
       ref={containerRef}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -379,10 +428,29 @@ export default function Character({ movementState }) {
         pointerEvents: isTakingScreenshot ? 'none' : 'auto'
       }}
     >
-      {voiceFeedback && !isListening && !error && <SpeechCloud className="mochi-companion-bubble">{voiceFeedback}</SpeechCloud>}
-      {companionMessage && !isListening && !error && !voiceFeedback && <SpeechCloud className="mochi-companion-bubble">{companionMessage}</SpeechCloud>}
-      {isHappy && !companionMessage && !isListening && !error && !voiceFeedback && <SpeechCloud>Hi!</SpeechCloud>}
-      {isSleeping && !companionMessage && !isListening && !error && !voiceFeedback && <SpeechCloud className="mochi-sleep-bubble">Zzz...</SpeechCloud>}
+      {isManualSleep && (
+        <div
+          className="mochi-sleep-pill"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            wakeUp();
+          }}
+          title="Click or press Alt + S to wake Nick"
+        >
+          <span className="mochi-sleep-pill-icon">💤</span>
+          <span className="mochi-sleep-pill-text">Nick is asleep</span>
+          <span className="mochi-sleep-pill-shortcut">Alt+S</span>
+        </div>
+      )}
+
+      {wakeGreeting && !isManualSleep && !isListening && !error && (
+        <SpeechCloud className="mochi-companion-bubble">{wakeGreeting}</SpeechCloud>
+      )}
+      {voiceFeedback && !isListening && !error && !wakeGreeting && <SpeechCloud className="mochi-companion-bubble">{voiceFeedback}</SpeechCloud>}
+      {companionMessage && !isListening && !error && !voiceFeedback && !wakeGreeting && !isManualSleep && <SpeechCloud className="mochi-companion-bubble">{companionMessage}</SpeechCloud>}
+      {isHappy && !companionMessage && !isListening && !error && !voiceFeedback && !wakeGreeting && !isManualSleep && <SpeechCloud>Hi!</SpeechCloud>}
+      {isSleeping && !isManualSleep && !companionMessage && !isListening && !error && !voiceFeedback && !wakeGreeting && <SpeechCloud className="mochi-sleep-bubble">Zzz...</SpeechCloud>}
       {error && <SpeechCloud className="mochi-error-bubble">{error}</SpeechCloud>}
       {isListening && (
         <SpeechCloud className="mochi-listening-bubble" onClick={(e) => { e.stopPropagation(); stopListening(); }}>

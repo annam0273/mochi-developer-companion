@@ -1,11 +1,11 @@
 
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.log('Mochi Developer Companion extension installed!');
+  console.log('Nick - The Developer Companion extension installed!');
   
   chrome.contextMenus.create({
-    id: 'fox-root',
-    title: 'Fox',
+    id: 'nick-root',
+    title: 'Nick',
     contexts: ['page', 'selection', 'link']
   });
 

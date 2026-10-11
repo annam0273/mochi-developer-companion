@@ -533,3 +533,92 @@
   text-align: center;
   white-space: nowrap;
 }
+
+/* --- MANUAL SLEEP / HIDE STATE --- */
+.mochi-companion-container.mochi-asleep {
+  width: auto;
+  height: auto;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+}
+
+.mochi-companion-container.mochi-asleep .mochi-flipper {
+  opacity: 0;
+  transform: translateY(30px) scale(0.6) !important;
+  pointer-events: none !important;
+  transition: opacity 0.35s ease, transform 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.mochi-companion-container:not(.mochi-asleep) .mochi-flipper {
+  transition: opacity 0.35s ease, transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.mochi-sleep-pill {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #FFF3E3;
+  color: #3C2B25;
+  border: 3px solid #3C2B25;
+  border-radius: 999px;
+  padding: 8px 16px;
+  cursor: pointer;
+  pointer-events: auto;
+  box-shadow: 3px 4px 0px #3C2B25;
+  font-family: 'Comic Sans MS', cursive, sans-serif;
+  font-size: 13px;
+  font-weight: bold;
+  user-select: none;
+  animation: mochi-pill-breathe 3s infinite ease-in-out, mochi-pop-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
+  z-index: 1000;
+  white-space: nowrap;
+}
+
+.mochi-sleep-pill:hover {
+  background: #E07A3F;
+  color: #FFF3E3;
+  transform: translateY(-2px);
+  box-shadow: 3px 6px 0px #3C2B25;
+}
+
+.mochi-sleep-pill:active {
+  transform: translateY(2px);
+  box-shadow: 1px 1px 0px #3C2B25;
+}
+
+.mochi-sleep-pill-icon {
+  font-size: 15px;
+  animation: mochi-sleep-icon-float 2s infinite ease-in-out;
+}
+
+.mochi-sleep-pill-text {
+  letter-spacing: 0.3px;
+}
+
+.mochi-sleep-pill-shortcut {
+  background: rgba(60, 43, 37, 0.12);
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-family: monospace;
+  font-weight: 700;
+}
+
+.mochi-sleep-pill:hover .mochi-sleep-pill-shortcut {
+  background: rgba(255, 243, 227, 0.25);
+  color: #FFF3E3;
+}
+
+@keyframes mochi-pill-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.03); }
+}
+
+@keyframes mochi-sleep-icon-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
