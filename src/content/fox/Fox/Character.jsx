@@ -11,6 +11,7 @@ import ScribePanel from '../../../features/scribe/ScribePanel';
 import SketcherPanel from '../../../features/sketcher/SketcherPanel';
 import { useVoiceCommand } from '../../../features/voice/useVoiceCommand';
 import { useCompanionship } from './useCompanionship';
+import { usePageTheme } from './usePageTheme';
 
 const SpeechCloud = ({ className = '', onClick, children }) => (
   <div className={`mochi-comic-cloud-wrapper ${className}`} onClick={onClick}>
@@ -36,18 +37,6 @@ const SpeechCloud = ({ className = '', onClick, children }) => (
 
 export default function Character({ movementState }) {
   const containerRef = useRef(null);
-  const isBlinking = useBlink();
-  const isSystemSleeping = useSleep();
-  const [isSleeping, setIsSleeping] = useState(false);
-  const sleepTimerRef = useRef(null);
-  const movementStateRef = useRef(movementState);
-  React.useEffect(() => {
-    movementStateRef.current = movementState;
-  }, [movementState]);
-
-  const isSystemSleepingRef = useRef(isSystemSleeping);
-
-  const [wakeGreeting, setWakeGreeting] = useState('');
   const [isManualSleep, setIsManualSleep] = useState(() => {
     try {
       return sessionStorage.getItem('nick_manual_sleep') === 'true';
@@ -56,28 +45,66 @@ export default function Character({ movementState }) {
     }
   });
 
+  const isManualSleepRef = useRef(isManualSleep);
+  isManualSleepRef.current = isManualSleep;
+
+  const isBlinking = useBlink();
+  const isSystemSleeping = useSleep(isManualSleep);
+  const [isSleeping, setIsSleeping] = useState(isManualSleep);
+  const isSleepingRef = useRef(isSleeping);
+  isSleepingRef.current = isSleeping;
+  const sleepTimerRef = useRef(null);
+  const movementStateRef = useRef(movementState);
+  React.useEffect(() => {
+    movementStateRef.current = movementState;
+  }, [movementState]);
+
+  const pageTheme = usePageTheme();
+
+  const isSystemSleepingRef = useRef(isSystemSleeping);
+
+  const [wakeGreeting, setWakeGreeting] = useState('');
+  const [isCloudSuppressed, setIsCloudSuppressed] = useState(false);
+
+  const stopListeningRef = useRef(null);
+  const clearVoiceFeedbackRef = useRef(null);
+
   const wakeUp = useCallback(() => {
+    isManualSleepRef.current = false;
+    isSleepingRef.current = false;
     setIsManualSleep(false);
     setIsSleeping(false);
     try { sessionStorage.setItem('nick_manual_sleep', 'false'); } catch {}
     setIsHappy(true);
-    setWakeGreeting("I'm awake! ✨");
+    setWakeGreeting("I'm awake!");
     setTimeout(() => setIsHappy(false), 1200);
     setTimeout(() => setWakeGreeting(''), 2500);
   }, []);
 
   const putToSleep = useCallback(() => {
+    isManualSleepRef.current = true;
+    isSleepingRef.current = true;
     setIsManualSleep(true);
     setIsSleeping(true);
     try { sessionStorage.setItem('nick_manual_sleep', 'true'); } catch {}
+    if (clearVoiceFeedbackRef.current) {
+      clearVoiceFeedbackRef.current();
+    }
+    if (stopListeningRef.current) {
+      stopListeningRef.current(true);
+    }
     setIsMenuOpen(false);
     setActiveFeature(null);
     setIsScribeOpen(false);
     setWakeGreeting('');
+    if (movementStateRef.current?.triggerTaskMode) {
+      movementStateRef.current.triggerTaskMode();
+    }
   }, []);
 
   const toggleSleep = useCallback(() => {
-    if (isManualSleep || isSleeping) {
+    const isCurrentlyAsleep = isManualSleepRef.current || isSleepingRef.current || isManualSleep || isSleeping;
+    if (isCurrentlyAsleep) {
       wakeUp();
     } else {
       putToSleep();
@@ -155,10 +182,12 @@ export default function Character({ movementState }) {
     }
   };
 
-  const { isListening, transcript, error, voiceFeedback, startListening, stopListening } = useVoiceCommand(handleMenuAction);
+  const { isListening, transcript, error, voiceFeedback, startListening, stopListening, clearVoiceFeedback } = useVoiceCommand(handleMenuAction);
   const isListeningRef = useRef(isListening);
   
   isListeningRef.current = isListening;
+  stopListeningRef.current = stopListening;
+  clearVoiceFeedbackRef.current = clearVoiceFeedback;
   
   React.useEffect(() => {
     if (isListening) {
@@ -174,6 +203,26 @@ export default function Character({ movementState }) {
 
   React.useEffect(() => {
     const handleKeyDown = (e) => {
+      const isCurrentlyAsleep = isManualSleepRef.current || isSleepingRef.current || isManualSleep || isSleeping;
+
+      // Shortcut to toggle sleep mode (Alt + S) - always allowed
+      if (e.altKey && (e.code === 'KeyS' || e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.repeat) return;
+        toggleSleep();
+        return;
+      }
+
+      // When character is sleeping, NO OTHER SHORTCUTS should work!
+      if (isCurrentlyAsleep) {
+        if (e.altKey || (e.code === 'KeyV' || e.key === 'v') || (e.code === 'KeyB' || e.key === 'b') || (e.code === 'KeyC' || e.key === 'c')) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        return;
+      }
+
       if (e.altKey && (e.code === 'KeyV' || e.key === 'v')) {
         e.preventDefault();
         e.stopPropagation();
@@ -184,18 +233,11 @@ export default function Character({ movementState }) {
         }
       }
       
-      // Shortcut to toggle sleep mode (Alt + S)
-      if (e.altKey && (e.code === 'KeyS' || e.key === 's' || e.key === 'S')) {
+      // Shortcut to call character back to comfortable place / den (Alt + C or Alt + B)
+      if (e.altKey && (e.code === 'KeyC' || e.key === 'c' || e.key === 'C' || e.code === 'KeyB' || e.key === 'b' || e.key === 'B')) {
         e.preventDefault();
         e.stopPropagation();
         if (e.repeat) return;
-        toggleSleep();
-      }
-
-      // Shortcut to call character back to den
-      if (e.altKey && (e.code === 'KeyB' || e.key === 'b' || e.code === 'KeyC' || e.key === 'c')) {
-        e.preventDefault();
-        e.stopPropagation();
         if (movementStateRef.current.mode === 'peeking') {
           movementStateRef.current.triggerTaskMode();
         }
@@ -203,6 +245,15 @@ export default function Character({ movementState }) {
     };
     
     const handleKeyUp = (e) => {
+      const isCurrentlyAsleep = isManualSleepRef.current || isSleepingRef.current || isManualSleep || isSleeping;
+      if (isCurrentlyAsleep) {
+        if (e.code === 'KeyV' || e.key === 'v' || e.altKey) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        return;
+      }
+
       if (e.code === 'KeyV' || e.key === 'v') {
         if (isListeningRef.current) {
           stopListening();
@@ -210,13 +261,13 @@ export default function Character({ movementState }) {
       }
     };
     
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('keydown', handleKeyDown, true);
+    window.addEventListener('keyup', handleKeyUp, true);
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('keydown', handleKeyDown, true);
+      window.removeEventListener('keyup', handleKeyUp, true);
     };
-  }, [startListening, stopListening]);
+  }, [startListening, stopListening, toggleSleep, isManualSleep, isSleeping]);
 
 
 
@@ -308,9 +359,17 @@ export default function Character({ movementState }) {
     }
 
     if (mode === 'task') {
+      setIsCloudSuppressed(false);
       foxIdleTimerRef.current = setTimeout(() => {
-        triggerPeekingMode();
+        // Disappear bubbles first before peeking begins
+        setIsCloudSuppressed(true);
+        setWakeGreeting('');
+        setTimeout(() => {
+          triggerPeekingMode();
+        }, 400);
       }, 15000); // 15 seconds of no features used = start peeking
+    } else {
+      setIsCloudSuppressed(false);
     }
   }, [activeFeature, isScribeOpen, isMenuOpen, isSleeping, isListening, mode, triggerPeekingMode, triggerTaskMode]);
 
@@ -392,6 +451,7 @@ export default function Character({ movementState }) {
 
 
   const isDesignerActive = activeFeature === 'TYPOGRAPHER' || isEditMode || isWireframerActive || isXRayActive;
+  const hasActiveTool = Boolean(activeFeature || isDesignerActive || isScribeOpen);
 
   let stateClass = '';
   if (isDragging) {
@@ -408,8 +468,14 @@ export default function Character({ movementState }) {
     stateClass = 'mochi-compressing';
   } else if (isScribeOpen) {
     stateClass = 'mochi-scribing';
-  } else if (isSleeping) {
+  } else if (isSleeping || isManualSleep) {
     stateClass = 'mochi-sleeping';
+  } else if (!hasActiveTool && pageTheme === 'music') {
+    stateClass = 'mochi-music-vibing';
+  } else if (!hasActiveTool && pageTheme === 'dev') {
+    stateClass = 'mochi-dev-coding';
+  } else if (!hasActiveTool && pageTheme === 'video') {
+    stateClass = 'mochi-video-watching';
   } else if (isHappy || companionMood === 'happy') {
     stateClass = 'mochi-happy';
   } else if (isHovered) {
@@ -418,7 +484,7 @@ export default function Character({ movementState }) {
 
   return (
     <div
-      className={`mochi-companion-container ${isManualSleep ? 'mochi-asleep' : ''}`}
+      className={`mochi-companion-container ${isManualSleep ? 'mochi-asleep' : ''} ${mode === 'peeking' ? 'mochi-peeking' : ''}`}
       ref={containerRef}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -430,7 +496,7 @@ export default function Character({ movementState }) {
     >
       {isManualSleep && (
         <div
-          className="mochi-sleep-pill"
+          className="mochi-snore-widget"
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
@@ -438,21 +504,27 @@ export default function Character({ movementState }) {
           }}
           title="Click or press Alt + S to wake Nick"
         >
-          <span className="mochi-sleep-pill-icon">💤</span>
-          <span className="mochi-sleep-pill-text">Nick is asleep</span>
-          <span className="mochi-sleep-pill-shortcut">Alt+S</span>
+          <div className="mochi-snore-stream">
+            <span className="mochi-snore-letter snore-top">z</span>
+            <span className="mochi-snore-letter snore-mid">z</span>
+            <span className="mochi-snore-letter snore-bottom">Z</span>
+          </div>
+          <div className="mochi-snore-hover-pill">
+            <span className="mochi-snore-pill-text">Wake Nick</span>
+            <span className="mochi-snore-pill-shortcut">Alt+S</span>
+          </div>
         </div>
       )}
 
-      {wakeGreeting && !isManualSleep && !isListening && !error && (
+      {wakeGreeting && !isManualSleep && !isListening && !error && !isCloudSuppressed && mode !== 'peeking' && (
         <SpeechCloud className="mochi-companion-bubble">{wakeGreeting}</SpeechCloud>
       )}
-      {voiceFeedback && !isListening && !error && !wakeGreeting && <SpeechCloud className="mochi-companion-bubble">{voiceFeedback}</SpeechCloud>}
-      {companionMessage && !isListening && !error && !voiceFeedback && !wakeGreeting && !isManualSleep && <SpeechCloud className="mochi-companion-bubble">{companionMessage}</SpeechCloud>}
-      {isHappy && !companionMessage && !isListening && !error && !voiceFeedback && !wakeGreeting && !isManualSleep && <SpeechCloud>Hi!</SpeechCloud>}
-      {isSleeping && !isManualSleep && !companionMessage && !isListening && !error && !voiceFeedback && !wakeGreeting && <SpeechCloud className="mochi-sleep-bubble">Zzz...</SpeechCloud>}
-      {error && <SpeechCloud className="mochi-error-bubble">{error}</SpeechCloud>}
-      {isListening && (
+      {voiceFeedback && !isManualSleep && !isSleeping && !isListening && !error && !wakeGreeting && !isCloudSuppressed && mode !== 'peeking' && <SpeechCloud className="mochi-companion-bubble">{voiceFeedback}</SpeechCloud>}
+      {companionMessage && !isListening && !error && !voiceFeedback && !wakeGreeting && !isManualSleep && !isCloudSuppressed && mode !== 'peeking' && <SpeechCloud className="mochi-companion-bubble">{companionMessage}</SpeechCloud>}
+      {isHappy && !companionMessage && !isListening && !error && !voiceFeedback && !wakeGreeting && !isManualSleep && !isCloudSuppressed && mode !== 'peeking' && <SpeechCloud>Hi!</SpeechCloud>}
+      {isSleeping && !isManualSleep && !companionMessage && !isListening && !error && !voiceFeedback && !wakeGreeting && !isCloudSuppressed && mode !== 'peeking' && <SpeechCloud className="mochi-sleep-bubble">Zzz...</SpeechCloud>}
+      {error && !isCloudSuppressed && mode !== 'peeking' && <SpeechCloud className="mochi-error-bubble">{error}</SpeechCloud>}
+      {isListening && !isCloudSuppressed && mode !== 'peeking' && (
         <SpeechCloud className="mochi-listening-bubble" onClick={(e) => { e.stopPropagation(); stopListening(); }}>
           {transcript || "Tell me what to do..."}
         </SpeechCloud>
@@ -546,12 +618,24 @@ export default function Character({ movementState }) {
         </div>
       )}
 
+      {!hasActiveTool && pageTheme === 'music' && !isSleeping && !isManualSleep && mode !== 'peeking' && (
+        <div className="mochi-music-vibes-container">
+          <span className="mochi-music-note note1">♪</span>
+          <span className="mochi-music-note note2">♫</span>
+          <span className="mochi-music-note note3">♩</span>
+        </div>
+      )}
+
       <div
         className="mochi-flipper"
         style={{
-          transform: `scaleX(${facingRight ? -1 : 1}) rotate(${rotation}deg) translateY(${isMenuOpen ? '-35px' : '0px'})`,
-          transition: (transitionDuration > 0 || isMenuOpen) && !isDragging
-            ? 'transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+          transform: `scaleX(${facingRight ? -1 : 1}) rotate(${rotation}deg) translateY(${isManualSleep ? '160px' : isMenuOpen ? '-35px' : '0px'})`,
+          opacity: isManualSleep ? 0 : 1,
+          pointerEvents: isManualSleep ? 'none' : 'auto',
+          transition: (transitionDuration > 0 || isMenuOpen || isManualSleep) && !isDragging
+            ? isManualSleep
+              ? 'transform 0.55s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.5s ease'
+              : 'transform 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.35s ease'
             : 'none',
           position: 'relative',
           zIndex: 1
@@ -562,7 +646,7 @@ export default function Character({ movementState }) {
           viewBox="0 0 100 100"
           xmlns="http://www.w3.org/2000/svg"
         >
-          <g id="tail" style={{ transformOrigin: '35px 75px' }}>
+          <g id="tail" style={{ display: mode === 'peeking' ? 'none' : 'block', transformOrigin: '35px 75px' }}>
             <path
               d="M 35 75 C 10 75, 5 35, 20 30 C 40 25, 50 60, 35 75 Z"
               fill="#E07A3F"
@@ -582,14 +666,58 @@ export default function Character({ movementState }) {
             />
           </g>
 
-          <g id="paws">
+          <g id="paws" style={{ display: mode === 'peeking' ? 'none' : 'block' }}>
             <ellipse id="paw-left" cx="35" cy="85" rx="6" ry="4" fill="#3C2B25" />
             <ellipse id="paw-right" cx="55" cy="85" rx="6" ry="4" fill="#3C2B25" />
           </g>
 
-          <g id="bandana" style={{ display: (activeFeature === 'SCOUT' || isDesignerActive || activeFeature === 'SKETCHER' || activeFeature === 'COMPRESSOR' || isScribeOpen) ? 'none' : 'block' }}>
+          <g id="bandana" style={{ display: (hasActiveTool || pageTheme === 'music' || pageTheme === 'dev' || pageTheme === 'video') ? 'none' : 'block' }}>
             <path d="M 30 48 L 45 62 L 60 48 Z" fill="#698B43" />
           </g>
+
+          {!hasActiveTool && pageTheme === 'music' && (
+            <g id="music-outfit">
+              {/* Dark sleek bandana base with neon trim */}
+              <path d="M 30 48 L 45 62 L 60 48 Z" fill="#181818" />
+              <path d="M 30 48 L 45 62 L 60 48" fill="none" stroke="#1DB954" strokeWidth="1.5" strokeLinejoin="round" />
+            </g>
+          )}
+
+          {!hasActiveTool && pageTheme === 'dev' && (
+            <g id="dev-outfit">
+              {/* Tech Hoodie Cowl Body (Contours Nick's natural chest collar space) */}
+              <path d="M 27 48 L 45 67 L 63 48 Z" fill="#1E232A" />
+              {/* Electric Cyan Edge Piping */}
+              <path d="M 27 48 L 45 67 L 63 48" fill="none" stroke="#58A6FF" strokeWidth="1.5" strokeLinejoin="round" />
+
+              {/* Inner Hood V-Neck / Terminal Undershirt */}
+              <path d="M 33 48 L 45 61 L 57 48 Z" fill="#0D1117" />
+              <path d="M 33 48 L 45 61 L 57 48" fill="none" stroke="#30363D" strokeWidth="1" strokeLinejoin="round" />
+
+              {/* Draped Hood Collar folds behind neck */}
+              <path d="M 28 47 C 34 52, 56 52, 62 47 C 58 44, 32 44, 28 47 Z" fill="#2D333B" stroke="#444C56" strokeWidth="1" />
+
+              {/* Glowing Embroidered < / > Code Symbol */}
+              <path d="M 41.5 52.5 L 39.5 54.5 L 41.5 56.5" fill="none" stroke="#58A6FF" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              <line x1="43.5" y1="57.5" x2="46.5" y2="51.5" stroke="#3FB950" strokeWidth="1.4" strokeLinecap="round" />
+              <path d="M 48.5 52.5 L 50.5 54.5 L 48.5 56.5" fill="none" stroke="#58A6FF" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+
+              {/* Crisp White Hoodie Drawstrings with Silver Metal Tips */}
+              <path d="M 38 49 Q 37 56 38 62" fill="none" stroke="#F0F6FC" strokeWidth="1.6" strokeLinecap="round" />
+              <rect x="37" y="61" width="2" height="3" rx="0.8" fill="#8B949E" />
+              <path d="M 52 49 Q 53 56 52 62" fill="none" stroke="#F0F6FC" strokeWidth="1.6" strokeLinecap="round" />
+              <rect x="51" y="61" width="2" height="3" rx="0.8" fill="#8B949E" />
+            </g>
+          )}
+
+          {!hasActiveTool && pageTheme === 'video' && (
+            <g id="video-outfit">
+              {/* Cinema bowtie */}
+              <path d="M 38 52 L 52 52 L 45 57 Z" fill="#E50914" />
+              <path d="M 38 58 L 52 58 L 45 53 Z" fill="#E50914" />
+              <circle cx="45" cy="55" r="2" fill="#B20710" />
+            </g>
+          )}
 
           {activeFeature === 'SCOUT' && (
             <g id="scout-outfit">
@@ -779,6 +907,67 @@ export default function Character({ movementState }) {
                 {/* Arms */}
                 <line x1="32" y1="37" x2="25" y2="30" stroke="#D4AC0D" strokeWidth="1.5" />
                 <line x1="58" y1="37" x2="65" y2="30" stroke="#D4AC0D" strokeWidth="1.5" />
+              </g>
+            )}
+
+            {!hasActiveTool && pageTheme === 'music' && (
+              <g id="music-headphones">
+                {/* Headband arch */}
+                <path
+                  d="M 20 28 C 16 4, 74 4, 70 28"
+                  fill="none"
+                  stroke="#121212"
+                  strokeWidth="4.5"
+                  strokeLinecap="round"
+                />
+                {/* Neon accent band */}
+                <path
+                  d="M 23 25 C 20 7, 70 7, 67 25"
+                  fill="none"
+                  stroke="#1DB954"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                />
+                {/* Left earcup */}
+                <rect x="14" y="21" width="10" height="16" rx="5" fill="#181818" stroke="#121212" strokeWidth="1.2" />
+                <rect x="16" y="23" width="6" height="12" rx="3" fill="#282828" />
+                <circle cx="19" cy="29" r="1.5" fill="#1DB954" />
+
+                {/* Right earcup */}
+                <rect x="66" y="21" width="10" height="16" rx="5" fill="#181818" stroke="#121212" strokeWidth="1.2" />
+                <rect x="68" y="23" width="6" height="12" rx="3" fill="#282828" />
+                <circle cx="71" cy="29" r="1.5" fill="#1DB954" />
+              </g>
+            )}
+
+            {!hasActiveTool && pageTheme === 'dev' && (
+              <g id="dev-glasses">
+                {/* Modern Blue-Light Developer Glasses framing eyes */}
+                {/* Left Lens Frame */}
+                <rect x="27" y="25" width="16" height="13" rx="3.5" fill="rgba(56, 139, 253, 0.08)" stroke="#2C3E50" strokeWidth="2.2" />
+                {/* Right Lens Frame */}
+                <rect x="47" y="25" width="16" height="13" rx="3.5" fill="rgba(56, 139, 253, 0.08)" stroke="#2C3E50" strokeWidth="2.2" />
+                {/* Bridge */}
+                <path d="M 43 29 Q 45 27.5 47 29" fill="none" stroke="#2C3E50" strokeWidth="2.2" />
+                {/* Silver Frame Corner Rivets */}
+                <circle cx="28.5" cy="27" r="0.7" fill="#BDC3C7" />
+                <circle cx="61.5" cy="27" r="0.7" fill="#BDC3C7" />
+                {/* Temple Arms */}
+                <line x1="27" y1="28" x2="20" y2="26" stroke="#2C3E50" strokeWidth="2" strokeLinecap="round" />
+                <line x1="63" y1="28" x2="70" y2="26" stroke="#2C3E50" strokeWidth="2" strokeLinecap="round" />
+                {/* Anti-reflective Blue-Light Sheen Glints */}
+                <path d="M 29 27.5 L 33 27.5" fill="none" stroke="#58A6FF" strokeWidth="1.2" strokeLinecap="round" opacity="0.85" />
+                <path d="M 49 27.5 L 53 27.5" fill="none" stroke="#58A6FF" strokeWidth="1.2" strokeLinecap="round" opacity="0.85" />
+              </g>
+            )}
+
+            {!hasActiveTool && pageTheme === 'video' && (
+              <g id="video-glasses">
+                <rect x="25" y="27" width="17" height="11" rx="2" fill="rgba(235, 87, 87, 0.6)" stroke="#FFFFFF" strokeWidth="2" />
+                <rect x="48" y="27" width="17" height="11" rx="2" fill="rgba(47, 128, 237, 0.6)" stroke="#FFFFFF" strokeWidth="2" />
+                <line x1="42" y1="31" x2="48" y2="31" stroke="#FFFFFF" strokeWidth="2.5" />
+                <path d="M 25 30 L 18 26" fill="none" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" />
+                <path d="M 65 30 L 72 26" fill="none" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" />
               </g>
             )}
 

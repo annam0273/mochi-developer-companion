@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 /**
  * Custom hook to manage randomized blinking animation.
@@ -42,13 +42,20 @@ export function useBlink() {
   return isBlinking;
 }
 
-export function useSleep() {
+export function useSleep(isManualSleep = false) {
   const [isSleeping, setIsSleeping] = useState(false);
+  const isManualSleepRef = useRef(isManualSleep);
+  isManualSleepRef.current = isManualSleep;
 
   useEffect(() => {
     let idleTimeout;
 
-    const resetIdle = () => {
+    const resetIdle = (e) => {
+      // If manually asleep, do NOT wake up on idle events
+      if (isManualSleepRef.current) return;
+      // If a shortcut attempt (Alt key held), do NOT wake on shortcut keypress
+      if (e && e.altKey) return;
+
       setIsSleeping(false);
       clearTimeout(idleTimeout);
       // Go to sleep after 60 seconds of inactivity

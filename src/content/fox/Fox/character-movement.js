@@ -8,6 +8,7 @@ export function useMovement() {
   const [facingRight, setFacingRight] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [transitionDuration, setTransitionDuration] = useState(0);
+  const [charOpacity, setCharOpacity] = useState(1);
   const [mode, setMode] = useState('initial'); // 'initial' | 'peeking' | 'task'
 
   const dragStartRef = useRef({ pointerX: 0, pointerY: 0, elementX: 0, elementY: 0 });
@@ -22,6 +23,7 @@ export function useMovement() {
 
   // Track the current hide position so we can retreat to it when entering task mode
   const currentHidePosRef = useRef({ x: 170, y: 170 }); 
+  const lastEdgeRef = useRef(null); 
 
   // --- DRAGGING LOGIC ---
   const handlePointerDown = useCallback((e) => {
@@ -29,6 +31,7 @@ export function useMovement() {
     
     setIsDragging(true);
     setTransitionDuration(0);
+    setCharOpacity(1);
     setRotation(0); // Upright when grabbed
     setCharOffset({ x: 0, y: 0 }); // Snap fox back to den if dragging
 
@@ -113,6 +116,7 @@ export function useMovement() {
 
     let scheduleTimeout;
     let peekTimeout;
+    let stage2Timeout;
     let retreatTimeout;
 
     if (mode === 'initial') {
@@ -137,80 +141,142 @@ export function useMovement() {
           return;
         }
 
-        const edges = ['bottom', 'top', 'left', 'right'];
-        const edge = edges[Math.floor(Math.random() * edges.length)];
+        const allEdges = ['top', 'left', 'right', 'bottom'];
+        const candidateEdges = allEdges.filter(e => e !== lastEdgeRef.current);
+        const edge = candidateEdges[Math.floor(Math.random() * candidateEdges.length)];
+        lastEdgeRef.current = edge;
         
         let absHideX = 0, absHideY = 0;
-        let absPeekX = 0, absPeekY = 0;
+        let absPeekX_Ears = 0, absPeekY_Ears = 0;
+        let absPeekX_Face = 0, absPeekY_Face = 0;
         let rot = 0;
         let faceRight = false;
 
-        const rangeX = -(window.innerWidth - 160);
-        const rangeY = -(window.innerHeight - 160);
-        const PEEK_AMT = 75; // 75px ensures the eyes and full head are visible
+        const PEEK_EARS = 32; // 32px reveals only the ears
+        const PEEK_FACE = 68; // 68px reveals the full face (ears, eyes, snout)
 
-        // mochi-fox-corner has padding-right:10px and padding-bottom:10px, so total size is 160x160.
-        // It is anchored at right: 0, bottom: 0.
-        if (edge === 'bottom') {
-          absHideY = 170; // 10px below screen (160 + 10)
-          absPeekY = 160 - PEEK_AMT;  // Only PEEK_AMT visible
-          absHideX = absPeekX = Math.random() * rangeX;
-          rot = 0;
-          faceRight = Math.random() > 0.5;
-        } else if (edge === 'top') {
-          absHideY = -(window.innerHeight) - 10; // 10px above screen
-          absPeekY = -(window.innerHeight) + PEEK_AMT; // PEEK_AMT visible
-          absHideX = absPeekX = Math.random() * rangeX;
+        if (edge === 'top') {
+          // Upside-down peeking from ceiling: ears only or full face
+          absHideY = -(window.innerHeight + 10); 
+          absPeekY_Ears = -(window.innerHeight - 15) + PEEK_EARS;
+          absPeekY_Face = -(window.innerHeight - 15) + PEEK_FACE;
+          const minTopX = -(window.innerWidth - 240);
+          absHideX = absPeekX_Ears = absPeekX_Face = Math.min(0, Math.max(minTopX, -(Math.random() * (window.innerWidth - 260) + 30)));
           rot = 180;
-          faceRight = Math.random() > 0.5;
+          faceRight = false;
+        } else if (edge === 'bottom') {
+          // Upright peeking from floor: ears only or full face
+          absHideY = 180; 
+          absPeekY_Ears = 165 - 28; // 28px ears only
+          absPeekY_Face = 165 - 55; // 55px full face
+          const minBottomX = -(window.innerWidth - 240);
+          absHideX = absPeekX_Ears = absPeekX_Face = Math.min(0, Math.max(minBottomX, -(Math.random() * (window.innerWidth - 260) + 30)));
+          rot = 0;
+          faceRight = false;
         } else if (edge === 'left') {
-          absHideX = -(window.innerWidth) - 10; // 10px left of screen
-          absPeekX = -(window.innerWidth) + PEEK_AMT; // PEEK_AMT visible
-          absHideY = absPeekY = Math.random() * rangeY;
-          rot = 90; // Feet point left
+          // Peeking in from left wall: ears only or full face
+          absHideX = -(window.innerWidth - 20); 
+          absPeekX_Ears = -(window.innerWidth - 40) + PEEK_EARS;
+          absPeekX_Face = -(window.innerWidth - 40) + PEEK_FACE;
+          const minLeftY = -(window.innerHeight - 240);
+          absHideY = absPeekY_Ears = absPeekY_Face = Math.min(0, Math.max(minLeftY, -(Math.random() * (window.innerHeight - 260) + 40)));
+          rot = 90;
+          faceRight = false;
         } else if (edge === 'right') {
-          absHideX = 170; // 10px right of screen (160 + 10)
-          absPeekX = 160 - PEEK_AMT;  // Only PEEK_AMT visible
-          absHideY = absPeekY = Math.random() * rangeY;
-          rot = -90; // Feet point right
+          // Peeking in from right wall: ears only or full face
+          absHideX = 210; 
+          absPeekX_Ears = 190 - PEEK_EARS;
+          absPeekX_Face = 190 - PEEK_FACE;
+          const minRightY = -(window.innerHeight - 240);
+          absHideY = absPeekY_Ears = absPeekY_Face = Math.min(0, Math.max(minRightY, -(Math.random() * (window.innerHeight - 260) + 40)));
+          rot = -90;
+          faceRight = false;
         }
 
         const hideOffset = { 
           x: absHideX - cornerPosRef.current.x, 
           y: absHideY - cornerPosRef.current.y 
         };
-        const peekOffset = { 
-          x: absPeekX - cornerPosRef.current.x, 
-          y: absPeekY - cornerPosRef.current.y 
+        const earsOffset = { 
+          x: absPeekX_Ears - cornerPosRef.current.x, 
+          y: absPeekY_Ears - cornerPosRef.current.y 
+        };
+        const faceOffset = { 
+          x: absPeekX_Face - cornerPosRef.current.x, 
+          y: absPeekY_Face - cornerPosRef.current.y 
         };
 
         currentHidePosRef.current = hideOffset;
 
         // 1. Instantly move to hide position on the new edge
         setTransitionDuration(0);
+        setCharOpacity(1);
         setCharOffset(hideOffset);
         setRotation(rot);
         setFacingRight(faceRight);
 
-        // 2. Slide out to peek
-        peekTimeout = setTimeout(() => {
-          if (isDraggingRef.current || modeRef.current !== 'peeking') return;
-          setTransitionDuration(1.2); // Smooth, slower slide
-          setCharOffset(peekOffset);
-          
-          // 3. Wait while peeking
-          const timePeeking = Math.random() * 8000 + 8000; // Peek for 8-16 seconds
-          
-          retreatTimeout = setTimeout(() => {
+        // Randomly pick peek style:
+        // ~50% two-stage peek (first ears only, and then face full also)
+        // ~25% ears-only peek (sneaky shy ears)
+        // ~25% direct full face peek
+        const rand = Math.random();
+        const peekStyle = rand < 0.5 ? 'two-stage' : rand < 0.75 ? 'ears-only' : 'full-face';
+
+        if (peekStyle === 'two-stage') {
+          // 1. Slide out with ears only
+          peekTimeout = setTimeout(() => {
             if (isDraggingRef.current || modeRef.current !== 'peeking') return;
-            // 4. Retreat to hide
-            setTransitionDuration(0.5);
-            setCharOffset(hideOffset);
-            
-            // Loop
-            scheduleNextPeek();
-          }, timePeeking);
-        }, 100);
+            setTransitionDuration(0.8);
+            setCharOffset(earsOffset);
+
+            // 2. Pause with ears only, and then slide out to the face full also!
+            stage2Timeout = setTimeout(() => {
+              if (isDraggingRef.current || modeRef.current !== 'peeking') return;
+              setTransitionDuration(0.7);
+              setCharOffset(faceOffset);
+
+              // 3. Wait while full face is peeking
+              const timePeeking = Math.random() * 6000 + 6000;
+              retreatTimeout = setTimeout(() => {
+                if (isDraggingRef.current || modeRef.current !== 'peeking') return;
+                // 4. Retreat to hide
+                setTransitionDuration(0.5);
+                setCharOffset(hideOffset);
+                scheduleNextPeek();
+              }, timePeeking);
+            }, 1800);
+          }, 100);
+        } else if (peekStyle === 'ears-only') {
+          // Only with the ears
+          peekTimeout = setTimeout(() => {
+            if (isDraggingRef.current || modeRef.current !== 'peeking') return;
+            setTransitionDuration(0.8);
+            setCharOffset(earsOffset);
+
+            const timePeeking = Math.random() * 3000 + 4000;
+            retreatTimeout = setTimeout(() => {
+              if (isDraggingRef.current || modeRef.current !== 'peeking') return;
+              setTransitionDuration(0.5);
+              setCharOffset(hideOffset);
+              scheduleNextPeek();
+            }, timePeeking);
+          }, 100);
+        } else {
+          // Direct full face
+          peekTimeout = setTimeout(() => {
+            if (isDraggingRef.current || modeRef.current !== 'peeking') return;
+            setTransitionDuration(1.2);
+            setCharOffset(faceOffset);
+
+            const timePeeking = Math.random() * 6000 + 7000;
+            retreatTimeout = setTimeout(() => {
+              if (isDraggingRef.current || modeRef.current !== 'peeking') return;
+              setTransitionDuration(0.5);
+              setCharOffset(hideOffset);
+              scheduleNextPeek();
+            }, timePeeking);
+          }, 100);
+        }
 
       }, timeHidden);
     };
@@ -223,6 +289,7 @@ export function useMovement() {
       if (!document.hidden && modeRef.current === 'peeking') {
         clearTimeout(scheduleTimeout);
         clearTimeout(peekTimeout);
+        clearTimeout(stage2Timeout);
         clearTimeout(retreatTimeout);
         scheduleNextPeek(true);
       }
@@ -233,6 +300,7 @@ export function useMovement() {
       document.removeEventListener('visibilitychange', handleVisibility);
       clearTimeout(scheduleTimeout);
       clearTimeout(peekTimeout);
+      clearTimeout(stage2Timeout);
       clearTimeout(retreatTimeout);
     };
   }, [isDragging, mode]);
@@ -247,6 +315,7 @@ export function useMovement() {
     // If the tab is hidden, skip animations entirely to prevent background throttling bugs
     if (document.hidden) {
       setTransitionDuration(0);
+      setCharOpacity(1);
       setRotation(0);
       setFacingRight(false);
       setCharOffset({ x: 0, y: 0 });
@@ -254,31 +323,30 @@ export function useMovement() {
       return;
     }
 
-    // 1. Retreat to the current hide position immediately
-    setTransitionDuration(0.3);
+    // 1. Vanish slowly at the current edge (fade opacity and retreat into edge)
+    setTransitionDuration(0.5);
+    setCharOpacity(0);
     setCharOffset({ x: currentHidePosRef.current.x, y: currentHidePosRef.current.y });
     
-    // Use requestAnimationFrame chaining instead of setTimeout to avoid background throttling glitches
+    // 2. Once completely vanished (500ms), silently teleport below the bottom of the screen at the den
     setTimeout(() => {
-      // 2. Teleport into the den (bottom right of corner)
       setTransitionDuration(0);
       setRotation(0);
       setFacingRight(false);
-      setCharOffset({ x: 0, y: 170 });
+      setCharOffset({ x: 0, y: 170 }); // 170px below the bottom of the screen
       
-      // Wait a frame for the teleport to apply without animation
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          // 3. Slide up to visible inside the den
-          setTransitionDuration(0.8);
-          setCharOffset({ x: 0, y: 0 });
-          
-          if (onComplete) {
-            setTimeout(onComplete, 800);
-          }
-        });
-      });
-    }, 300);
+      // 3. Wait for teleport to apply without animation
+      setTimeout(() => {
+        // 4. Appear in the comfortable place by sliding smoothly up from the bottom of the screen!
+        setTransitionDuration(0.8);
+        setCharOpacity(1);
+        setCharOffset({ x: 0, y: 0 });
+        
+        if (onComplete) {
+          setTimeout(onComplete, 800);
+        }
+      }, 60);
+    }, 500);
   }, []);
 
   const triggerPeekingMode = useCallback(() => {
@@ -288,5 +356,5 @@ export function useMovement() {
     setTimeout(() => updateMode('peeking'), 500);
   }, []);
 
-  return { cornerPos, charOffset, rotation, facingRight, isDragging, transitionDuration, mode, handlePointerDown, triggerTaskMode, triggerPeekingMode };
+  return { cornerPos, charOffset, rotation, facingRight, isDragging, transitionDuration, mode, charOpacity, handlePointerDown, triggerTaskMode, triggerPeekingMode };
 }

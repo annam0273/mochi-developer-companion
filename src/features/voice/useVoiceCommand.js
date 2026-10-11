@@ -70,7 +70,12 @@ export function useVoiceCommand(onCommand) {
   const isListeningRef = useRef(false);
   const commandExecutedRef = useRef(false);
 
-  const stopListening = useCallback(() => {
+  const clearVoiceFeedback = useCallback(() => {
+    setVoiceFeedback(null);
+  }, []);
+
+  const stopListening = useCallback((suppressFeedback = false) => {
+    const wasListening = isListeningRef.current;
     isListeningRef.current = false;
     setIsListening(false);
     if (recognitionRef.current) {
@@ -79,8 +84,8 @@ export function useVoiceCommand(onCommand) {
       } catch (e) {}
     }
     
-    // If we stopped listening and no command was triggered, give feedback
-    if (!commandExecutedRef.current) {
+    // Only give feedback if we were actually listening, no command executed, and not suppressed
+    if (wasListening && !commandExecutedRef.current && !suppressFeedback) {
       setVoiceFeedback("Can you repeat again?");
       setTimeout(() => setVoiceFeedback(null), 2500);
     }
@@ -217,5 +222,5 @@ export function useVoiceCommand(onCommand) {
     };
   }, []);
 
-  return { isListening, transcript, error, voiceFeedback, startListening, stopListening };
+  return { isListening, transcript, error, voiceFeedback, startListening, stopListening, clearVoiceFeedback };
 }

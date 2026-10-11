@@ -536,89 +536,346 @@
 
 /* --- MANUAL SLEEP / HIDE STATE --- */
 .mochi-companion-container.mochi-asleep {
-  width: auto;
-  height: auto;
+  pointer-events: none;
+}
+
+.mochi-companion-container.mochi-asleep .mochi-snore-widget {
+  pointer-events: auto;
+}
+
+/* --- FLOATING SNORE ZZZ WIDGET (RIGHT END) --- */
+.mochi-snore-widget {
+  position: absolute;
+  bottom: 0px;
+  right: -20px;
   display: flex;
+  flex-direction: column;
   align-items: flex-end;
   justify-content: flex-end;
-}
-
-.mochi-companion-container.mochi-asleep .mochi-flipper {
-  opacity: 0;
-  transform: translateY(30px) scale(0.6) !important;
-  pointer-events: none !important;
-  transition: opacity 0.35s ease, transform 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-
-.mochi-companion-container:not(.mochi-asleep) .mochi-flipper {
-  transition: opacity 0.35s ease, transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-
-.mochi-sleep-pill {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: #FFF3E3;
-  color: #3C2B25;
-  border: 3px solid #3C2B25;
-  border-radius: 999px;
-  padding: 8px 16px;
   cursor: pointer;
   pointer-events: auto;
-  box-shadow: 3px 4px 0px #3C2B25;
-  font-family: 'Comic Sans MS', cursive, sans-serif;
-  font-size: 13px;
-  font-weight: bold;
   user-select: none;
-  animation: mochi-pill-breathe 3s infinite ease-in-out, mochi-pop-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-  transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
   z-index: 1000;
-  white-space: nowrap;
+  padding: 0;
+  animation: mochi-pop-in 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  animation-delay: 0.25s;
+  opacity: 0;
 }
 
-.mochi-sleep-pill:hover {
+.mochi-snore-stream {
+  position: relative;
+  width: 55px;
+  height: 115px;
+  pointer-events: none;
+  transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.mochi-snore-widget:hover .mochi-snore-stream {
+  transform: translateY(-4px) scale(1.08);
+}
+
+.mochi-snore-letter {
+  position: absolute;
+  font-family: 'Comic Sans MS', cursive, sans-serif;
+  color: #E07A3F;
+  text-shadow: 
+    2px 2px 0px #3C2B25,
+    -1px -1px 0px #FFF3E3,
+    1px -1px 0px #3C2B25,
+    -1px 1px 0px #3C2B25,
+    0px 3px 6px rgba(0,0,0,0.25);
+  user-select: none;
+  pointer-events: none;
+  opacity: 0; /* Hidden between breath cycles */
+}
+
+/* 1. Large Z at the bottom right — exhales first, then floats up and disappears */
+.mochi-snore-letter.snore-bottom {
+  bottom: 8px;
+  right: 4px;
+  font-size: 34px;
+  font-weight: 900;
+  animation: mochi-snore-puff-bottom 2.4s infinite ease-out;
+  animation-delay: 0s;
+}
+
+/* 2. Medium z directly above large Z — exhales second, floats up and disappears */
+.mochi-snore-letter.snore-mid {
+  bottom: 48px;
+  right: 12px;
+  font-size: 23px;
+  font-weight: 800;
+  animation: mochi-snore-puff-mid 2.4s infinite ease-out;
+  animation-delay: 0.35s;
+}
+
+/* 3. Small z at the crest — exhales third, floats highest and disappears */
+.mochi-snore-letter.snore-top {
+  bottom: 82px;
+  right: 20px;
+  font-size: 15px;
+  font-weight: 800;
+  animation: mochi-snore-puff-top 2.4s infinite ease-out;
+  animation-delay: 0.7s;
+}
+
+/* Cartoon snore puff keyframes: appear -> drift up in an S-curve -> fade out and disappear */
+@keyframes mochi-snore-puff-bottom {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.6) rotate(-8deg);
+  }
+  15% {
+    opacity: 1;
+    transform: translateY(0px) scale(1.05) rotate(-3deg);
+  }
+  45% {
+    opacity: 0.95;
+    transform: translateY(-16px) scale(1) rotate(3deg);
+  }
+  68% {
+    opacity: 0;
+    transform: translateY(-34px) scale(0.75) rotate(-6deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-34px) scale(0.75);
+  }
+}
+
+@keyframes mochi-snore-puff-mid {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.5) rotate(6deg);
+  }
+  15% {
+    opacity: 1;
+    transform: translateY(0px) scale(1.1) rotate(-4deg);
+  }
+  50% {
+    opacity: 0.9;
+    transform: translateY(-20px) scale(0.95) rotate(5deg);
+  }
+  72% {
+    opacity: 0;
+    transform: translateY(-40px) scale(0.7) rotate(-8deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-40px) scale(0.7);
+  }
+}
+
+@keyframes mochi-snore-puff-top {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.4) rotate(-10deg);
+  }
+  16% {
+    opacity: 1;
+    transform: translateY(0px) scale(1.15) rotate(8deg);
+  }
+  54% {
+    opacity: 0.85;
+    transform: translateY(-24px) scale(0.9) rotate(-4deg);
+  }
+  76% {
+    opacity: 0;
+    transform: translateY(-46px) scale(0.55) rotate(12deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-46px) scale(0.55);
+  }
+}
+
+/* Wake pill — anchored to right end, appears ONLY when hovering on the snore stream */
+.mochi-snore-hover-pill {
+  position: absolute;
+  bottom: -6px;
+  right: 0px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #FFF3E3;
+  color: #3C2B25;
+  border: 2.5px solid #3C2B25;
+  border-radius: 999px;
+  padding: 5px 12px;
+  box-shadow: 2px 3px 0px #3C2B25;
+  font-family: 'Comic Sans MS', cursive, sans-serif;
+  font-size: 12px;
+  font-weight: bold;
+  opacity: 0;
+  transform: translateY(8px) scale(0.9);
+  pointer-events: none;
+  transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.175, 0.885, 0.32, 1.275), background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+  white-space: nowrap;
+  z-index: 1002;
+}
+
+.mochi-snore-widget:hover .mochi-snore-hover-pill {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.mochi-snore-widget:hover .mochi-snore-hover-pill:hover {
   background: #E07A3F;
   color: #FFF3E3;
-  transform: translateY(-2px);
-  box-shadow: 3px 6px 0px #3C2B25;
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 2px 5px 0px #3C2B25;
 }
 
-.mochi-sleep-pill:active {
-  transform: translateY(2px);
-  box-shadow: 1px 1px 0px #3C2B25;
-}
-
-.mochi-sleep-pill-icon {
-  font-size: 15px;
-  animation: mochi-sleep-icon-float 2s infinite ease-in-out;
-}
-
-.mochi-sleep-pill-text {
-  letter-spacing: 0.3px;
-}
-
-.mochi-sleep-pill-shortcut {
+.mochi-snore-pill-shortcut {
   background: rgba(60, 43, 37, 0.12);
-  border-radius: 6px;
-  padding: 2px 6px;
-  font-size: 11px;
+  border-radius: 5px;
+  padding: 1px 5px;
+  font-size: 10px;
   font-family: monospace;
   font-weight: 700;
 }
 
-.mochi-sleep-pill:hover .mochi-sleep-pill-shortcut {
+.mochi-snore-widget:hover .mochi-snore-hover-pill:hover .mochi-snore-pill-shortcut {
   background: rgba(255, 243, 227, 0.25);
   color: #FFF3E3;
 }
 
-@keyframes mochi-pill-breathe {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.03); }
+/* --- PEEKING STATE CLEANUP --- */
+.mochi-companion-container.mochi-peeking #paws,
+.mochi-companion-container.mochi-peeking #tail {
+  display: none !important;
 }
 
-@keyframes mochi-sleep-icon-float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-2px); }
+.mochi-companion-container.mochi-peeking .mochi-comic-cloud-wrapper {
+  display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
+
+/* --- PAGE ADAPTIVE THEMES & MUSIC VIBING --- */
+
+/* 1. Music Vibing (Spotify / SoundCloud / Audio) */
+.mochi-svg.mochi-music-vibing #head {
+  animation: mochi-vibe-headbob 0.85s infinite cubic-bezier(0.45, 0.05, 0.55, 0.95);
+  transform-origin: 45px 45px;
+}
+
+@keyframes mochi-vibe-headbob {
+  0%, 100% {
+    transform: rotate(0deg) translateY(0px);
+  }
+  25% {
+    transform: rotate(3deg) translateY(2.5px);
+  }
+  50% {
+    transform: rotate(-1deg) translateY(0.5px);
+  }
+  75% {
+    transform: rotate(-3deg) translateY(2.5px);
+  }
+}
+
+.mochi-svg.mochi-music-vibing #tail {
+  animation: mochi-vibe-tailwag 0.85s infinite ease-in-out;
+  transform-origin: 35px 75px;
+}
+
+@keyframes mochi-vibe-tailwag {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(14deg); }
+}
+
+
+/* Floating musical notes */
+.mochi-music-vibes-container {
+  position: absolute;
+  top: -12px;
+  right: 12px;
+  width: 60px;
+  height: 60px;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.mochi-music-note {
+  position: absolute;
+  font-family: 'Segoe UI Symbol', system-ui, sans-serif;
+  font-size: 17px;
+  font-weight: 700;
+  color: #1DB954;
+  text-shadow: 0 0 8px rgba(29, 185, 84, 0.6);
+  opacity: 0;
+  user-select: none;
+}
+
+.mochi-music-note.note1 {
+  left: 6px;
+  bottom: 4px;
+  animation: mochi-float-note 2.4s infinite ease-in-out;
+}
+
+.mochi-music-note.note2 {
+  left: 28px;
+  bottom: 8px;
+  font-size: 20px;
+  color: #1ed760;
+  animation: mochi-float-note 2.4s infinite ease-in-out 0.8s;
+}
+
+.mochi-music-note.note3 {
+  left: 18px;
+  bottom: 0px;
+  font-size: 15px;
+  color: #10b981;
+  animation: mochi-float-note 2.4s infinite ease-in-out 1.6s;
+}
+
+@keyframes mochi-float-note {
+  0% {
+    transform: translateY(0) scale(0.6) rotate(-10deg);
+    opacity: 0;
+  }
+  30% {
+    opacity: 0.95;
+    transform: translateY(-16px) scale(1.05) rotate(5deg);
+  }
+  70% {
+    opacity: 0.75;
+    transform: translateY(-34px) scale(1.15) rotate(-8deg);
+  }
+  100% {
+    transform: translateY(-50px) scale(0.8) rotate(12deg);
+    opacity: 0;
+  }
+}
+
+/* 2. Dev / Coding Theme */
+.mochi-svg.mochi-dev-coding #head {
+  animation: mochi-dev-focus 3.5s infinite ease-in-out;
+  transform-origin: 45px 35px;
+}
+
+@keyframes mochi-dev-focus {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-1.5deg) translateY(-0.5px);
+  }
+  75% {
+    transform: rotate(1.5deg) translateY(0.5px);
+  }
+}
+
+/* 3. Video / Streaming Theme */
+.mochi-svg.mochi-video-watching {
+  animation: mochi-video-sway 4s infinite ease-in-out;
+}
+
+@keyframes mochi-video-sway {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(2deg) translateY(-1px); }
+}
+
 
