@@ -36,8 +36,23 @@
   z-index: 2147483647 !important;
 }
 
-body.scout-docked-active #focus-companion-root {
+html.scout-docked-active .mochi-corner-fox,
+html.scout-docked-active .mochi-flipper,
+body.scout-docked-active ~ #focus-companion-root .mochi-corner-fox,
+body.scout-docked-active ~ #focus-companion-root .mochi-flipper,
+body.scout-docked-active .mochi-corner-fox,
+body.scout-docked-active .mochi-flipper {
   display: none !important;
+  pointer-events: none !important;
+}
+
+html.scout-docked-active .mochi-companion-container,
+body.scout-docked-active ~ #focus-companion-root .mochi-companion-container,
+body.scout-docked-active .mochi-companion-container {
+  pointer-events: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  margin: 0 !important;
 }
 
 @keyframes mochi-unroll {

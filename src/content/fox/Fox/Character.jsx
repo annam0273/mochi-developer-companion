@@ -158,6 +158,55 @@ export default function Character({ movementState }) {
 
   const [isScribeOpen, setIsScribeOpen] = useState(false);
 
+  const [isDocked, setIsDocked] = useState(() => {
+    try {
+      return document.documentElement.classList.contains('mochi-docked-active') ||
+             document.documentElement.classList.contains('scout-docked-active') ||
+             document.documentElement.classList.contains('scribe-docked-active') ||
+             document.body.classList.contains('scout-docked-active') ||
+             document.body.classList.contains('scribe-docked-active');
+    } catch {
+      return false;
+    }
+  });
+
+  React.useEffect(() => {
+    const checkDocked = () => {
+      try {
+        const docked = document.documentElement.classList.contains('mochi-docked-active') ||
+                       document.documentElement.classList.contains('scout-docked-active') ||
+                       document.documentElement.classList.contains('scribe-docked-active') ||
+                       document.body.classList.contains('scout-docked-active') ||
+                       document.body.classList.contains('scribe-docked-active');
+        setIsDocked(docked);
+      } catch {}
+    };
+
+    checkDocked();
+
+    const observer = new MutationObserver(checkDocked);
+    if (document.documentElement) {
+      observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    }
+    if (document.body) {
+      observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+  React.useEffect(() => {
+    try {
+      chrome.storage.local.get(['mochiScoutDocked', 'mochiScribeDocked'], (res) => {
+        if ((activeFeature === 'SCOUT' && res.mochiScoutDocked) || (isScribeOpen && res.mochiScribeDocked)) {
+          setIsDocked(true);
+        } else if (!activeFeature && !isScribeOpen) {
+          setIsDocked(false);
+        }
+      });
+    } catch {}
+  }, [activeFeature, isScribeOpen]);
+
   const handleMenuAction = async (action, payload = null) => {
     setActiveFeaturePayload(payload);
 
@@ -484,17 +533,18 @@ export default function Character({ movementState }) {
 
   return (
     <div
-      className={`mochi-companion-container ${isManualSleep ? 'mochi-asleep' : ''} ${mode === 'peeking' ? 'mochi-peeking' : ''}`}
+      className={`mochi-companion-container ${isManualSleep ? 'mochi-asleep' : ''} ${mode === 'peeking' ? 'mochi-peeking' : ''} ${isDocked ? 'mochi-docked-hidden' : ''}`}
       ref={containerRef}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={handleClick}
       style={{
         opacity: isTakingScreenshot ? 0 : 1,
-        pointerEvents: isTakingScreenshot ? 'none' : 'auto'
+        pointerEvents: (isTakingScreenshot || isDocked) ? 'none' : 'auto',
+        ...(isDocked ? { width: 0, height: 0, margin: 0, padding: 0 } : {})
       }}
     >
-      {isManualSleep && (
+      {isManualSleep && !isDocked && (
         <div
           className="mochi-snore-widget"
           onPointerDown={(e) => e.stopPropagation()}
@@ -516,15 +566,31 @@ export default function Character({ movementState }) {
         </div>
       )}
 
-      {wakeGreeting && !isManualSleep && !isListening && !error && !isCloudSuppressed && mode !== 'peeking' && (
+      {!isDocked && wakeGreeting && !isManualSleep && !isListening && !error && !isCloudSuppressed && mode !== 'peeking' && (
         <SpeechCloud className="mochi-companion-bubble">{wakeGreeting}</SpeechCloud>
       )}
-      {voiceFeedback && !isManualSleep && !isSleeping && !isListening && !error && !wakeGreeting && !isCloudSuppressed && mode !== 'peeking' && <SpeechCloud className="mochi-companion-bubble">{voiceFeedback}</SpeechCloud>}
-      {companionMessage && !isListening && !error && !voiceFeedback && !wakeGreeting && !isManualSleep && !isCloudSuppressed && mode !== 'peeking' && <SpeechCloud className="mochi-companion-bubble">{companionMessage}</SpeechCloud>}
-      {isHappy && !companionMessage && !isListening && !error && !voiceFeedback && !wakeGreeting && !isManualSleep && !isCloudSuppressed && mode !== 'peeking' && <SpeechCloud>Hi!</SpeechCloud>}
-      {isSleeping && !isManualSleep && !companionMessage && !isListening && !error && !voiceFeedback && !wakeGreeting && !isCloudSuppressed && mode !== 'peeking' && <SpeechCloud className="mochi-sleep-bubble">Zzz...</SpeechCloud>}
-      {error && !isCloudSuppressed && mode !== 'peeking' && <SpeechCloud className="mochi-error-bubble">{error}</SpeechCloud>}
-      {isListening && !isCloudSuppressed && mode !== 'peeking' && (
+      {!isDocked && voiceFeedback && !isManualSleep && !isSleeping && !isListening && !error && !wakeGreeting && !isCloudSuppressed && mode !== 'peeking' && <SpeechCloud className="mochi-companion-bubble">{voiceFeedback}</SpeechCloud>}
+      {!isDocked && companionMessage && !isListening && !error && !voiceFeedback && !wakeGreeting && !isManualSleep && !isCloudSuppressed && mode !== 'peeking' && <SpeechCloud className="mochi-companion-bubble">{companionMessage}</SpeechCloud>}
+      {!isDocked && isHappy && !companionMessage && !isListening && !error && !voiceFeedback && !wakeGreeting && !isManualSleep && !isCloudSuppressed && mode !== 'peeking' && <SpeechCloud>Hi!</SpeechCloud>}
+      {!isDocked && isSleeping && !isManualSleep && !companionMessage && !isListening && !error && !voiceFeedback && !wakeGreeting && !isCloudSuppressed && mode !== 'peeking' && (
+        <div
+          className="mochi-snore-widget mochi-idle-snore"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            wakeUp();
+          }}
+          title="Nick is resting"
+        >
+          <div className="mochi-snore-stream">
+            <span className="mochi-snore-letter snore-top">z</span>
+            <span className="mochi-snore-letter snore-mid">z</span>
+            <span className="mochi-snore-letter snore-bottom">Z</span>
+          </div>
+        </div>
+      )}
+      {!isDocked && error && !isCloudSuppressed && mode !== 'peeking' && <SpeechCloud className="mochi-error-bubble">{error}</SpeechCloud>}
+      {!isDocked && isListening && !isCloudSuppressed && mode !== 'peeking' && (
         <SpeechCloud className="mochi-listening-bubble" onClick={(e) => { e.stopPropagation(); stopListening(); }}>
           {transcript || "Tell me what to do..."}
         </SpeechCloud>
@@ -542,7 +608,10 @@ export default function Character({ movementState }) {
       )}
 
       {activeFeature === 'SCOUT' && (
-        <ScoutPanel onClose={(e) => { e?.stopPropagation(); setActiveFeature(null); }} />
+        <ScoutPanel
+          onClose={(e) => { e?.stopPropagation(); setActiveFeature(null); setIsDocked(false); }}
+          onDockChange={setIsDocked}
+        />
       )}
 
       {activeFeature === 'TYPOGRAPHER' && (
@@ -563,7 +632,10 @@ export default function Character({ movementState }) {
       )}
 
       {isScribeOpen && (
-        <ScribePanel onClose={() => setIsScribeOpen(false)} />
+        <ScribePanel
+          onClose={() => { setIsScribeOpen(false); setIsDocked(false); }}
+          onDockChange={setIsDocked}
+        />
       )}
 
       {activeFeature === 'SKETCHER' && screenshotDataUrl && (
@@ -618,7 +690,7 @@ export default function Character({ movementState }) {
         </div>
       )}
 
-      {!hasActiveTool && pageTheme === 'music' && !isSleeping && !isManualSleep && mode !== 'peeking' && (
+      {!isDocked && !hasActiveTool && pageTheme === 'music' && !isSleeping && !isManualSleep && mode !== 'peeking' && (
         <div className="mochi-music-vibes-container">
           <span className="mochi-music-note note1">♪</span>
           <span className="mochi-music-note note2">♫</span>
@@ -626,8 +698,9 @@ export default function Character({ movementState }) {
         </div>
       )}
 
-      <div
-        className="mochi-flipper"
+      {!isDocked && (
+        <div
+          className="mochi-flipper"
         style={{
           transform: `scaleX(${facingRight ? -1 : 1}) rotate(${rotation}deg) translateY(${isManualSleep ? '160px' : isMenuOpen ? '-35px' : '0px'})`,
           opacity: isManualSleep ? 0 : 1,
@@ -984,6 +1057,7 @@ export default function Character({ movementState }) {
           </g>
         </svg>
       </div>
+      )}
     </div>
   );
 }

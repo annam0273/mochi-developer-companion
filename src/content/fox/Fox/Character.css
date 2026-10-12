@@ -562,6 +562,14 @@
   opacity: 0;
 }
 
+/* Idle snore stream floats beside the character's head on the left side */
+.mochi-snore-widget.mochi-idle-snore {
+  bottom: 62px;
+  left: -12px;
+  right: auto;
+  pointer-events: auto;
+}
+
 .mochi-snore-stream {
   position: relative;
   width: 55px;
@@ -877,5 +885,33 @@
   0%, 100% { transform: rotate(0deg); }
   50% { transform: rotate(2deg) translateY(-1px); }
 }
+
+/* --- DOCK / SIDEBAR MODE --- */
+.mochi-companion-container.mochi-docked-hidden {
+  pointer-events: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.mochi-companion-container.mochi-docked-hidden .mochi-flipper,
+.mochi-companion-container.mochi-docked-hidden .mochi-snore-widget,
+.mochi-companion-container.mochi-docked-hidden .mochi-comic-cloud-wrapper,
+.mochi-companion-container.mochi-docked-hidden .mochi-music-vibes-container {
+  display: none !important;
+  pointer-events: none !important;
+}
+
+/* Global fallback when dock mode is active on html or body */
+html.mochi-docked-active .mochi-flipper,
+html.scout-docked-active .mochi-flipper,
+html.scribe-docked-active .mochi-flipper,
+body.scout-docked-active ~ #focus-companion-root .mochi-flipper,
+body.scribe-docked-active ~ #focus-companion-root .mochi-flipper {
+  display: none !important;
+  pointer-events: none !important;
+}
+
 
 

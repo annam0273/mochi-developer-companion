@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useScout } from './useScout';
 import './ScoutPanel.css';
 
-export default function ScoutPanel({ onClose }) {
+export default function ScoutPanel({ onClose, onDockChange }) {
   const data = useScout(true);
   const [activeTab, setActiveTab] = useState('preview');
   const [copied, setCopied] = useState('');
@@ -29,16 +29,25 @@ export default function ScoutPanel({ onClose }) {
       document.documentElement.style.transition = 'padding-right 0.3s ease';
       document.documentElement.style.paddingRight = '300px';
       document.body.classList.add('scout-docked-active');
+      document.documentElement.classList.add('scout-docked-active');
+      document.documentElement.classList.add('mochi-docked-active');
+      onDockChange?.(true);
     } else {
       document.documentElement.style.paddingRight = '0px';
       document.body.classList.remove('scout-docked-active');
+      document.documentElement.classList.remove('scout-docked-active');
+      document.documentElement.classList.remove('mochi-docked-active');
+      onDockChange?.(false);
     }
 
     return () => {
       document.documentElement.style.paddingRight = '0px';
       document.body.classList.remove('scout-docked-active');
+      document.documentElement.classList.remove('scout-docked-active');
+      document.documentElement.classList.remove('mochi-docked-active');
+      onDockChange?.(false);
     };
-  }, [isDocked]);
+  }, [isDocked, onDockChange]);
 
   const copyToClipboard = (text, id) => {
     if (!text) return;
