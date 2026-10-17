@@ -58,13 +58,14 @@ export function useSleep(isManualSleep = false) {
 
       setIsSleeping(false);
       clearTimeout(idleTimeout);
-      // Go to sleep after 60 seconds of inactivity
-      idleTimeout = setTimeout(() => setIsSleeping(true), 60000);
+      // Go to sleep after 15 seconds of inactivity
+      idleTimeout = setTimeout(() => setIsSleeping(true), 15000);
     };
 
-    window.addEventListener('mousemove', resetIdle);
+    window.addEventListener('mousemove', resetIdle, { passive: true });
     window.addEventListener('keydown', resetIdle);
     window.addEventListener('click', resetIdle);
+    window.addEventListener('scroll', resetIdle, { passive: true });
 
     resetIdle(); // Start timer
 
@@ -72,6 +73,7 @@ export function useSleep(isManualSleep = false) {
       window.removeEventListener('mousemove', resetIdle);
       window.removeEventListener('keydown', resetIdle);
       window.removeEventListener('click', resetIdle);
+      window.removeEventListener('scroll', resetIdle);
       clearTimeout(idleTimeout);
     };
   }, []);

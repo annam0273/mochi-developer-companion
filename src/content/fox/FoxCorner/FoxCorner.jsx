@@ -21,7 +21,7 @@ export default function FoxCorner() {
           transform: `translate(${movementState.charOffset.x}px, ${movementState.charOffset.y}px)`,
           opacity: movementState.charOpacity ?? 1,
           transition: (movementState.transitionDuration > 0 && !movementState.isDragging) 
-            ? `transform ${movementState.transitionDuration}s ease-in-out, opacity ${movementState.transitionDuration}s ease-in-out` 
+            ? `transform ${movementState.transitionDuration}s ${movementState.transitionEasing || 'ease-in-out'}, opacity ${movementState.transitionDuration}s ${movementState.transitionEasing || 'ease-in-out'}` 
             : 'none',
         }}
       >

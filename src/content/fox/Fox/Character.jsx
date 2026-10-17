@@ -74,7 +74,7 @@ export default function Character({ movementState }) {
     isSleepingRef.current = false;
     setIsManualSleep(false);
     setIsSleeping(false);
-    try { sessionStorage.setItem('nick_manual_sleep', 'false'); } catch {}
+    try { sessionStorage.setItem('nick_manual_sleep', 'false'); } catch { }
     setIsHappy(true);
     setWakeGreeting("I'm awake!");
     setTimeout(() => setIsHappy(false), 1200);
@@ -86,7 +86,7 @@ export default function Character({ movementState }) {
     isSleepingRef.current = true;
     setIsManualSleep(true);
     setIsSleeping(true);
-    try { sessionStorage.setItem('nick_manual_sleep', 'true'); } catch {}
+    try { sessionStorage.setItem('nick_manual_sleep', 'true'); } catch { }
     if (clearVoiceFeedbackRef.current) {
       clearVoiceFeedbackRef.current();
     }
@@ -161,10 +161,10 @@ export default function Character({ movementState }) {
   const [isDocked, setIsDocked] = useState(() => {
     try {
       return document.documentElement.classList.contains('mochi-docked-active') ||
-             document.documentElement.classList.contains('scout-docked-active') ||
-             document.documentElement.classList.contains('scribe-docked-active') ||
-             document.body.classList.contains('scout-docked-active') ||
-             document.body.classList.contains('scribe-docked-active');
+        document.documentElement.classList.contains('scout-docked-active') ||
+        document.documentElement.classList.contains('scribe-docked-active') ||
+        document.body.classList.contains('scout-docked-active') ||
+        document.body.classList.contains('scribe-docked-active');
     } catch {
       return false;
     }
@@ -174,12 +174,12 @@ export default function Character({ movementState }) {
     const checkDocked = () => {
       try {
         const docked = document.documentElement.classList.contains('mochi-docked-active') ||
-                       document.documentElement.classList.contains('scout-docked-active') ||
-                       document.documentElement.classList.contains('scribe-docked-active') ||
-                       document.body.classList.contains('scout-docked-active') ||
-                       document.body.classList.contains('scribe-docked-active');
+          document.documentElement.classList.contains('scout-docked-active') ||
+          document.documentElement.classList.contains('scribe-docked-active') ||
+          document.body.classList.contains('scout-docked-active') ||
+          document.body.classList.contains('scribe-docked-active');
         setIsDocked(docked);
-      } catch {}
+      } catch { }
     };
 
     checkDocked();
@@ -204,7 +204,7 @@ export default function Character({ movementState }) {
           setIsDocked(false);
         }
       });
-    } catch {}
+    } catch { }
   }, [activeFeature, isScribeOpen]);
 
   const handleMenuAction = async (action, payload = null) => {
@@ -233,11 +233,11 @@ export default function Character({ movementState }) {
 
   const { isListening, transcript, error, voiceFeedback, startListening, stopListening, clearVoiceFeedback } = useVoiceCommand(handleMenuAction);
   const isListeningRef = useRef(isListening);
-  
+
   isListeningRef.current = isListening;
   stopListeningRef.current = stopListening;
   clearVoiceFeedbackRef.current = clearVoiceFeedback;
-  
+
   React.useEffect(() => {
     if (isListening) {
       // If peeking, return to comfortable position immediately
@@ -281,7 +281,7 @@ export default function Character({ movementState }) {
           startListening();
         }
       }
-      
+
       // Shortcut to call character back to comfortable place / den (Alt + C or Alt + B)
       if (e.altKey && (e.code === 'KeyC' || e.key === 'c' || e.key === 'C' || e.code === 'KeyB' || e.key === 'b' || e.key === 'B')) {
         e.preventDefault();
@@ -292,7 +292,7 @@ export default function Character({ movementState }) {
         }
       }
     };
-    
+
     const handleKeyUp = (e) => {
       const isCurrentlyAsleep = isManualSleepRef.current || isSleepingRef.current || isManualSleep || isSleeping;
       if (isCurrentlyAsleep) {
@@ -309,7 +309,7 @@ export default function Character({ movementState }) {
         }
       }
     };
-    
+
     window.addEventListener('keydown', handleKeyDown, true);
     window.addEventListener('keyup', handleKeyUp, true);
     return () => {
@@ -398,13 +398,14 @@ export default function Character({ movementState }) {
 
   const resetFoxIdle = React.useCallback(() => {
     if (foxIdleTimerRef.current) clearTimeout(foxIdleTimerRef.current);
-    
+
     // Only allow peeking if no features are active, no menu is open, and not sleeping or listening
     if (activeFeature || isScribeOpen || isMenuOpen || isSleeping || isListening) {
+      setIsCloudSuppressed(false);
       if (mode === 'peeking') {
         triggerTaskMode();
       }
-      return; 
+      return;
     }
 
     if (mode === 'task') {
@@ -416,7 +417,7 @@ export default function Character({ movementState }) {
         setTimeout(() => {
           triggerPeekingMode();
         }, 400);
-      }, 15000); // 15 seconds of no features used = start peeking
+      }, 40000); // 40 seconds of active browsing without features = playful peek
     } else {
       setIsCloudSuppressed(false);
     }
@@ -447,10 +448,14 @@ export default function Character({ movementState }) {
     return () => window.removeEventListener('pointerdown', handleGlobalClick);
   }, []);
 
-  const handleClick = () => {
+  const handleClick = (e) => {
+    e?.stopPropagation?.();
     if (isDragging) return;
     if (mode === 'peeking') {
-      triggerTaskMode();
+      triggerTaskMode(() => {
+        setIsHappy(true);
+        setTimeout(() => setIsHappy(false), 800);
+      });
       return;
     }
     if (isManualSleep || isSleeping) {
@@ -537,6 +542,11 @@ export default function Character({ movementState }) {
       ref={containerRef}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onPointerDown={(e) => {
+        if (mode === 'peeking') {
+          e.stopPropagation();
+        }
+      }}
       onClick={handleClick}
       style={{
         opacity: isTakingScreenshot ? 0 : 1,
@@ -572,7 +582,7 @@ export default function Character({ movementState }) {
       {!isDocked && voiceFeedback && !isManualSleep && !isSleeping && !isListening && !error && !wakeGreeting && !isCloudSuppressed && mode !== 'peeking' && <SpeechCloud className="mochi-companion-bubble">{voiceFeedback}</SpeechCloud>}
       {!isDocked && companionMessage && !isListening && !error && !voiceFeedback && !wakeGreeting && !isManualSleep && !isCloudSuppressed && mode !== 'peeking' && <SpeechCloud className="mochi-companion-bubble">{companionMessage}</SpeechCloud>}
       {!isDocked && isHappy && !companionMessage && !isListening && !error && !voiceFeedback && !wakeGreeting && !isManualSleep && !isCloudSuppressed && mode !== 'peeking' && <SpeechCloud>Hi!</SpeechCloud>}
-      {!isDocked && isSleeping && !isManualSleep && !companionMessage && !isListening && !error && !voiceFeedback && !wakeGreeting && !isCloudSuppressed && mode !== 'peeking' && (
+      {!isDocked && isSleeping && !isManualSleep && !isListening && mode !== 'peeking' && (
         <div
           className="mochi-snore-widget mochi-idle-snore"
           onPointerDown={(e) => e.stopPropagation()}
@@ -650,7 +660,7 @@ export default function Character({ movementState }) {
 
       {/* DESIGNER ACTIVE CLOUD BUTTON */}
       {(isEditMode || isWireframerActive || isXRayActive) && (
-        <div 
+        <div
           className="mochi-designer-cloud-button"
           onClick={(e) => {
             e.stopPropagation();
@@ -701,362 +711,362 @@ export default function Character({ movementState }) {
       {!isDocked && (
         <div
           className="mochi-flipper"
-        style={{
-          transform: `scaleX(${facingRight ? -1 : 1}) rotate(${rotation}deg) translateY(${isManualSleep ? '160px' : isMenuOpen ? '-35px' : '0px'})`,
-          opacity: isManualSleep ? 0 : 1,
-          pointerEvents: isManualSleep ? 'none' : 'auto',
-          transition: (transitionDuration > 0 || isMenuOpen || isManualSleep) && !isDragging
-            ? isManualSleep
-              ? 'transform 0.55s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.5s ease'
-              : 'transform 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.35s ease'
-            : 'none',
-          position: 'relative',
-          zIndex: 1
-        }}
-      >
-        <svg
-          className={`mochi-svg ${stateClass}`}
-          viewBox="0 0 100 100"
-          xmlns="http://www.w3.org/2000/svg"
+          style={{
+            transform: `scaleX(${facingRight ? -1 : 1}) rotate(${rotation}deg) translateY(${isManualSleep ? '160px' : isMenuOpen ? '-35px' : '0px'})`,
+            opacity: isManualSleep ? 0 : 1,
+            pointerEvents: isManualSleep ? 'none' : 'auto',
+            transition: (transitionDuration > 0 || isMenuOpen || isManualSleep) && !isDragging
+              ? isManualSleep
+                ? 'transform 0.55s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.5s ease'
+                : 'transform 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.35s ease'
+              : 'none',
+            position: 'relative',
+            zIndex: 1
+          }}
         >
-          <g id="tail" style={{ display: mode === 'peeking' ? 'none' : 'block', transformOrigin: '35px 75px' }}>
-            <path
-              d="M 35 75 C 10 75, 5 35, 20 30 C 40 25, 50 60, 35 75 Z"
-              fill="#E07A3F"
-            />
-            {/* White tip */}
-            <path d="M 18 42 C 25 32, 32 37, 28 47 C 20 47, 12 47, 18 42 Z" fill="#FFF3E3" />
-          </g>
-
-          <g id="body">
-            <path
-              d="M 35 50 Q 30 70 32 85 L 58 85 Q 60 70 55 50 Z"
-              fill="#E07A3F"
-            />
-            <path
-              d="M 38 50 Q 35 70 40 85 L 50 85 Q 55 70 52 50 Z"
-              fill="#FFF3E3"
-            />
-          </g>
-
-          <g id="paws" style={{ display: mode === 'peeking' ? 'none' : 'block' }}>
-            <ellipse id="paw-left" cx="35" cy="85" rx="6" ry="4" fill="#3C2B25" />
-            <ellipse id="paw-right" cx="55" cy="85" rx="6" ry="4" fill="#3C2B25" />
-          </g>
-
-          <g id="bandana" style={{ display: (hasActiveTool || pageTheme === 'music' || pageTheme === 'dev' || pageTheme === 'video') ? 'none' : 'block' }}>
-            <path d="M 30 48 L 45 62 L 60 48 Z" fill="#698B43" />
-          </g>
-
-          {!hasActiveTool && pageTheme === 'music' && (
-            <g id="music-outfit">
-              {/* Dark sleek bandana base with neon trim */}
-              <path d="M 30 48 L 45 62 L 60 48 Z" fill="#181818" />
-              <path d="M 30 48 L 45 62 L 60 48" fill="none" stroke="#1DB954" strokeWidth="1.5" strokeLinejoin="round" />
-            </g>
-          )}
-
-          {!hasActiveTool && pageTheme === 'dev' && (
-            <g id="dev-outfit">
-              {/* Tech Hoodie Cowl Body (Contours Nick's natural chest collar space) */}
-              <path d="M 27 48 L 45 67 L 63 48 Z" fill="#1E232A" />
-              {/* Electric Cyan Edge Piping */}
-              <path d="M 27 48 L 45 67 L 63 48" fill="none" stroke="#58A6FF" strokeWidth="1.5" strokeLinejoin="round" />
-
-              {/* Inner Hood V-Neck / Terminal Undershirt */}
-              <path d="M 33 48 L 45 61 L 57 48 Z" fill="#0D1117" />
-              <path d="M 33 48 L 45 61 L 57 48" fill="none" stroke="#30363D" strokeWidth="1" strokeLinejoin="round" />
-
-              {/* Draped Hood Collar folds behind neck */}
-              <path d="M 28 47 C 34 52, 56 52, 62 47 C 58 44, 32 44, 28 47 Z" fill="#2D333B" stroke="#444C56" strokeWidth="1" />
-
-              {/* Glowing Embroidered < / > Code Symbol */}
-              <path d="M 41.5 52.5 L 39.5 54.5 L 41.5 56.5" fill="none" stroke="#58A6FF" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-              <line x1="43.5" y1="57.5" x2="46.5" y2="51.5" stroke="#3FB950" strokeWidth="1.4" strokeLinecap="round" />
-              <path d="M 48.5 52.5 L 50.5 54.5 L 48.5 56.5" fill="none" stroke="#58A6FF" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-
-              {/* Crisp White Hoodie Drawstrings with Silver Metal Tips */}
-              <path d="M 38 49 Q 37 56 38 62" fill="none" stroke="#F0F6FC" strokeWidth="1.6" strokeLinecap="round" />
-              <rect x="37" y="61" width="2" height="3" rx="0.8" fill="#8B949E" />
-              <path d="M 52 49 Q 53 56 52 62" fill="none" stroke="#F0F6FC" strokeWidth="1.6" strokeLinecap="round" />
-              <rect x="51" y="61" width="2" height="3" rx="0.8" fill="#8B949E" />
-            </g>
-          )}
-
-          {!hasActiveTool && pageTheme === 'video' && (
-            <g id="video-outfit">
-              {/* Cinema bowtie */}
-              <path d="M 38 52 L 52 52 L 45 57 Z" fill="#E50914" />
-              <path d="M 38 58 L 52 58 L 45 53 Z" fill="#E50914" />
-              <circle cx="45" cy="55" r="2" fill="#B20710" />
-            </g>
-          )}
-
-          {activeFeature === 'SCOUT' && (
-            <g id="scout-outfit">
-              {/* Trench coat collar/base */}
-              <path d="M 28 48 L 45 66 L 62 48 Z" fill="#8C7A6B" />
-              {/* White Shirt Collar */}
-              <path d="M 35 48 L 45 56 L 55 48 Z" fill="#FFFFFF" />
-              {/* Little red tie */}
-              <path d="M 43 51 L 47 51 L 45 64 Z" fill="#C0392B" />
-            </g>
-          )}
-
-          {isDesignerActive && (
-            <g id="designer-outfit">
-              {/* Black turtleneck */}
-              <path d="M 28 48 L 45 64 L 62 48 Z" fill="#2C3E50" />
-              {/* Higher neck part */}
-              <path d="M 35 45 L 45 52 L 55 45 Z" fill="#34495E" />
-            </g>
-          )}
-
-          {activeFeature === 'SKETCHER' && (
-            <g id="sketcher-outfit">
-              {/* Waist Tie Straps */}
-              <path d="M 31 65 L 34 65" fill="none" stroke="#E67E22" strokeWidth="2.5" />
-              <path d="M 56 65 L 59 65" fill="none" stroke="#E67E22" strokeWidth="2.5" />
-
-              {/* Apron Neck Loop */}
-              <path d="M 39 49 Q 45 56 51 49" fill="none" stroke="#E67E22" strokeWidth="2.5" />
-              <circle cx="39" cy="51" r="1.5" fill="#D35400" /> {/* Left Button */}
-              <circle cx="51" cy="51" r="1.5" fill="#D35400" /> {/* Right Button */}
-              
-              {/* Apron Body */}
-              <path d="M 38 52 L 52 52 C 54 58, 56 60, 56 65 L 54 82 C 45 84, 45 84, 36 82 L 34 65 C 34 60, 36 58, 38 52 Z" fill="#2980B9" />
-              
-              {/* White Stitching around Body */}
-              <path d="M 39 53 L 51 53 C 53 59, 55 61, 55 65 L 53 81 C 45 83, 45 83, 37 81 L 35 65 C 35 61, 37 59, 39 53 Z" fill="none" stroke="#AED6F1" strokeWidth="0.8" strokeDasharray="1.5, 1.5" />
-              
-              {/* Apron Pocket */}
-              <path d="M 38 66 L 52 66 L 51 74 C 45 77, 45 77, 39 74 Z" fill="#2471A3" />
-              {/* White Stitching around Pocket */}
-              <path d="M 39 67 L 51 67 L 50 73 C 45 76, 45 76, 40 73 Z" fill="none" stroke="#AED6F1" strokeWidth="0.8" strokeDasharray="1.5, 1.5" />
-
-              {/* Paint splatters */}
-              <path d="M 36 60 Q 38 62 37 65 Q 35 63 36 60 Z" fill="#F1C40F" />
-              <circle cx="51" cy="58" r="2.5" fill="#E74C3C" />
-              <circle cx="49" cy="55" r="1" fill="#E74C3C" />
-              
-              <circle cx="42" cy="78" r="3" fill="#2ECC71" />
-              <circle cx="46" cy="80" r="1.5" fill="#2ECC71" />
-
-              <path d="M 52 75 Q 54 78 51 79 Q 50 76 52 75 Z" fill="#9B59B6" />
-              <circle cx="54" cy="72" r="1.5" fill="#9B59B6" />
-            </g>
-          )}
-
-          {activeFeature === 'COMPRESSOR' && (
-            <g id="compressor-outfit">
-              {/* Base Vest (Neon Orange) */}
-              <path d="M 28 48 L 45 66 L 62 48 Z" fill="#E67E22" />
-              {/* Open front showing fur */}
-              <path d="M 38 48 L 45 58 L 52 48 Z" fill="#E07A3F" />
-              <path d="M 40 50 L 45 60 L 50 50 Z" fill="#FFF3E3" />
-              {/* Reflective Stripes */}
-              <path d="M 32 50 L 38 60 L 45 65 L 52 60 L 58 50" fill="none" stroke="#BDC3C7" strokeWidth="3.5" />
-            </g>
-          )}
-
-          {isScribeOpen && (
-            <g id="scribe-outfit">
-              {/* Brown Waistcoat */}
-              <path d="M 28 48 L 45 66 L 62 48 Z" fill="#8B4513" />
-              {/* Open front showing white shirt */}
-              <path d="M 35 48 L 45 62 L 55 48 Z" fill="#FFFFFF" />
-              {/* Red Bowtie */}
-              <path d="M 40 52 L 50 52 L 45 56 Z" fill="#C0392B" />
-              <path d="M 40 56 L 50 56 L 45 52 Z" fill="#C0392B" />
-              <circle cx="45" cy="54" r="1.5" fill="#922B21" />
-            </g>
-          )}
-
-          <g id="head" style={{ transformOrigin: '45px 35px' }}>
-            <g id="ears">
-              <g id="ear-left" style={{ transformOrigin: '25px 25px' }}>
-                <path d="M 20 25 Q 15 10 18 2 Q 28 5 35 17 Z" fill="#E07A3F" />
-                <path d="M 18 2 Q 22 5 24 10 L 19 12 Q 17 8 18 2 Z" fill="#3C2B25" />
-                <path d="M 23 23 Q 19 12 20 6 Q 26 10 31 18 Z" fill="#FFF3E3" />
-              </g>
-
-              <g id="ear-right" style={{ transformOrigin: '65px 25px' }}>
-                <path d="M 70 25 Q 75 10 72 2 Q 62 5 55 17 Z" fill="#E07A3F" />
-                <path d="M 72 2 Q 68 5 66 10 L 71 12 Q 73 8 72 2 Z" fill="#3C2B25" />
-                <path d="M 67 23 Q 71 12 70 6 Q 64 10 59 18 Z" fill="#FFF3E3" />
-              </g>
+          <svg
+            className={`mochi-svg ${stateClass}`}
+            viewBox="0 0 100 100"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <g id="tail" style={{ display: mode === 'peeking' ? 'none' : 'block', transformOrigin: '35px 75px' }}>
+              <path
+                d="M 35 75 C 10 75, 5 35, 20 30 C 40 25, 50 60, 35 75 Z"
+                fill="#E07A3F"
+              />
+              {/* White tip */}
+              <path d="M 18 42 C 25 32, 32 37, 28 47 C 20 47, 12 47, 18 42 Z" fill="#FFF3E3" />
             </g>
 
-            {/* Fox diamond-shaped head base */}
-            <path
-              d="M 45 15 C 20 15, 15 35, 20 45 C 25 55, 35 55, 45 55 C 55 55, 65 55, 70 45 C 75 35, 70 15, 45 15 Z"
-              fill="#E07A3F"
-            />
-
-            {/* Cheek tufts & lower face */}
-            <path
-              d="M 20 45 Q 15 50 25 48 Q 20 52 28 50 Q 35 55 45 55 Q 55 55 62 50 Q 70 52 65 48 Q 75 50 70 45 Z"
-              fill="#FFF3E3"
-            />
-
-            <g id="eyes-group">
-              {isSleeping ? (
-                <g id="eyes-sleeping">
-                  <path d="M 30 33 Q 35 36 40 33" fill="none" stroke="#3C2B25" strokeWidth="1.5" strokeLinecap="round" />
-                  <path d="M 50 33 Q 55 36 60 33" fill="none" stroke="#3C2B25" strokeWidth="1.5" strokeLinecap="round" />
-                </g>
-              ) : (
-                <g id="eyes" className={isBlinking && !isHappy ? "mochi-eyes-blink" : ""}>
-                  {/* Left Eye */}
-                  <ellipse cx="35" cy="32" rx="5" ry="7" fill="#FFF" />
-                  <ellipse cx={36 + pupilOffset.x} cy={32 + pupilOffset.y} rx="3" ry="5" fill="#8B4513" />
-                  <circle cx={37 + pupilOffset.x} cy={30 + pupilOffset.y} r="1.5" fill="#FFF" />
-
-                  {/* Right Eye */}
-                  <ellipse cx="55" cy="32" rx="5" ry="7" fill="#FFF" />
-                  <ellipse cx={54 + pupilOffset.x} cy={32 + pupilOffset.y} rx="3" ry="5" fill="#8B4513" />
-                  <circle cx={53 + pupilOffset.x} cy={30 + pupilOffset.y} r="1.5" fill="#FFF" />
-                </g>
-              )}
+            <g id="body">
+              <path
+                d="M 35 50 Q 30 70 32 85 L 58 85 Q 60 70 55 50 Z"
+                fill="#E07A3F"
+              />
+              <path
+                d="M 38 50 Q 35 70 40 85 L 50 85 Q 55 70 52 50 Z"
+                fill="#FFF3E3"
+              />
             </g>
 
-            {activeFeature === 'SCOUT' && (
-              <g id="scout-glasses">
-                {/* Glasses frame */}
-                <circle cx="35" cy="32" r="8" fill="none" stroke="#2C3E50" strokeWidth="2.5" />
-                <circle cx="55" cy="32" r="8" fill="none" stroke="#2C3E50" strokeWidth="2.5" />
-                {/* Bridge */}
-                <path d="M 43 32 L 47 32" fill="none" stroke="#2C3E50" strokeWidth="2.5" />
-                {/* Arms */}
-                <path d="M 27 32 L 20 28" fill="none" stroke="#2C3E50" strokeWidth="2" />
-                <path d="M 63 32 L 70 28" fill="none" stroke="#2C3E50" strokeWidth="2" />
-              </g>
-            )}
+            <g id="paws" style={{ display: mode === 'peeking' ? 'none' : 'block' }}>
+              <ellipse id="paw-left" cx="35" cy="85" rx="6" ry="4" fill="#3C2B25" />
+              <ellipse id="paw-right" cx="55" cy="85" rx="6" ry="4" fill="#3C2B25" />
+            </g>
 
-            {isDesignerActive && (
-              <g id="designer-glasses">
-                {/* Thick rectangular frames */}
-                <rect x="25" y="25" width="16" height="12" rx="2" fill="none" stroke="#2C3E50" strokeWidth="3" />
-                <rect x="49" y="25" width="16" height="12" rx="2" fill="none" stroke="#2C3E50" strokeWidth="3" />
-                {/* Bridge */}
-                <path d="M 41 29 L 49 29" fill="none" stroke="#2C3E50" strokeWidth="3" />
-                {/* Arms */}
-                <path d="M 25 29 L 18 25" fill="none" stroke="#2C3E50" strokeWidth="2" />
-                <path d="M 65 29 L 72 25" fill="none" stroke="#2C3E50" strokeWidth="2" />
-              </g>
-            )}
-
-            {isDesignerActive && (
-              <g id="designer-beret">
-                {/* Beret puffy top (droops to the right) */}
-                <path d="M 31 14 C 25 0, 55 -5, 63 8 C 65 12, 63 16, 59 14 C 50 12, 40 12, 31 14 Z" fill="#C0392B" />
-                {/* Beret Band */}
-                <ellipse cx="45" cy="14" rx="14" ry="2.5" fill="#922B21" />
-                {/* Stalk (Cabillou) */}
-                <line x1="46" y1="3" x2="48" y2="0" stroke="#C0392B" strokeWidth="2" strokeLinecap="round" />
-              </g>
-            )}
-
-            {activeFeature === 'COMPRESSOR' && (
-              <g id="compressor-hardhat">
-                {/* Helmet Dome */}
-                <path d="M 32 20 C 32 5, 58 5, 58 20 Z" fill="#F1C40F" />
-                {/* Helmet Brim */}
-                <ellipse cx="45" cy="20" rx="18" ry="3" fill="#F39C12" />
-                {/* Top Ridge */}
-                <path d="M 45 8 L 45 18" fill="none" stroke="#F39C12" strokeWidth="2.5" strokeLinecap="round" />
-                {/* Side Ridges */}
-                <path d="M 38 12 L 36 19" fill="none" stroke="#F39C12" strokeWidth="1.5" strokeLinecap="round" />
-                <path d="M 52 12 L 54 19" fill="none" stroke="#F39C12" strokeWidth="1.5" strokeLinecap="round" />
-              </g>
-            )}
-
-            {isScribeOpen && (
-              <g id="scribe-accessories">
-                {/* Half moon reading glasses resting low */}
-                <path d="M 32 37 A 6 6 0 0 0 42 37 Z" fill="rgba(255, 255, 255, 0.4)" stroke="#D4AC0D" strokeWidth="1.5" />
-                <path d="M 48 37 A 6 6 0 0 0 58 37 Z" fill="rgba(255, 255, 255, 0.4)" stroke="#D4AC0D" strokeWidth="1.5" />
-                <path d="M 42 37 Q 45 35 48 37" fill="none" stroke="#D4AC0D" strokeWidth="1.5" />
-                {/* Arms */}
-                <line x1="32" y1="37" x2="25" y2="30" stroke="#D4AC0D" strokeWidth="1.5" />
-                <line x1="58" y1="37" x2="65" y2="30" stroke="#D4AC0D" strokeWidth="1.5" />
-              </g>
-            )}
+            <g id="bandana" style={{ display: (hasActiveTool || pageTheme === 'music' || pageTheme === 'dev' || pageTheme === 'video') ? 'none' : 'block' }}>
+              <path d="M 30 48 L 45 62 L 60 48 Z" fill="#698B43" />
+            </g>
 
             {!hasActiveTool && pageTheme === 'music' && (
-              <g id="music-headphones">
-                {/* Headband arch */}
-                <path
-                  d="M 20 28 C 16 4, 74 4, 70 28"
-                  fill="none"
-                  stroke="#121212"
-                  strokeWidth="4.5"
-                  strokeLinecap="round"
-                />
-                {/* Neon accent band */}
-                <path
-                  d="M 23 25 C 20 7, 70 7, 67 25"
-                  fill="none"
-                  stroke="#1DB954"
-                  strokeWidth="1.6"
-                  strokeLinecap="round"
-                />
-                {/* Left earcup */}
-                <rect x="14" y="21" width="10" height="16" rx="5" fill="#181818" stroke="#121212" strokeWidth="1.2" />
-                <rect x="16" y="23" width="6" height="12" rx="3" fill="#282828" />
-                <circle cx="19" cy="29" r="1.5" fill="#1DB954" />
-
-                {/* Right earcup */}
-                <rect x="66" y="21" width="10" height="16" rx="5" fill="#181818" stroke="#121212" strokeWidth="1.2" />
-                <rect x="68" y="23" width="6" height="12" rx="3" fill="#282828" />
-                <circle cx="71" cy="29" r="1.5" fill="#1DB954" />
+              <g id="music-outfit">
+                {/* Dark sleek bandana base with neon trim */}
+                <path d="M 30 48 L 45 62 L 60 48 Z" fill="#181818" />
+                <path d="M 30 48 L 45 62 L 60 48" fill="none" stroke="#1DB954" strokeWidth="1.5" strokeLinejoin="round" />
               </g>
             )}
 
             {!hasActiveTool && pageTheme === 'dev' && (
-              <g id="dev-glasses">
-                {/* Modern Blue-Light Developer Glasses framing eyes */}
-                {/* Left Lens Frame */}
-                <rect x="27" y="25" width="16" height="13" rx="3.5" fill="rgba(56, 139, 253, 0.08)" stroke="#2C3E50" strokeWidth="2.2" />
-                {/* Right Lens Frame */}
-                <rect x="47" y="25" width="16" height="13" rx="3.5" fill="rgba(56, 139, 253, 0.08)" stroke="#2C3E50" strokeWidth="2.2" />
-                {/* Bridge */}
-                <path d="M 43 29 Q 45 27.5 47 29" fill="none" stroke="#2C3E50" strokeWidth="2.2" />
-                {/* Silver Frame Corner Rivets */}
-                <circle cx="28.5" cy="27" r="0.7" fill="#BDC3C7" />
-                <circle cx="61.5" cy="27" r="0.7" fill="#BDC3C7" />
-                {/* Temple Arms */}
-                <line x1="27" y1="28" x2="20" y2="26" stroke="#2C3E50" strokeWidth="2" strokeLinecap="round" />
-                <line x1="63" y1="28" x2="70" y2="26" stroke="#2C3E50" strokeWidth="2" strokeLinecap="round" />
-                {/* Anti-reflective Blue-Light Sheen Glints */}
-                <path d="M 29 27.5 L 33 27.5" fill="none" stroke="#58A6FF" strokeWidth="1.2" strokeLinecap="round" opacity="0.85" />
-                <path d="M 49 27.5 L 53 27.5" fill="none" stroke="#58A6FF" strokeWidth="1.2" strokeLinecap="round" opacity="0.85" />
+              <g id="dev-outfit">
+                {/* Tech Hoodie Cowl Body (Contours Nick's natural chest collar space) */}
+                <path d="M 27 48 L 45 67 L 63 48 Z" fill="#1E232A" />
+                {/* Electric Cyan Edge Piping */}
+                <path d="M 27 48 L 45 67 L 63 48" fill="none" stroke="#58A6FF" strokeWidth="1.5" strokeLinejoin="round" />
+
+                {/* Inner Hood V-Neck / Terminal Undershirt */}
+                <path d="M 33 48 L 45 61 L 57 48 Z" fill="#0D1117" />
+                <path d="M 33 48 L 45 61 L 57 48" fill="none" stroke="#30363D" strokeWidth="1" strokeLinejoin="round" />
+
+                {/* Draped Hood Collar folds behind neck */}
+                <path d="M 28 47 C 34 52, 56 52, 62 47 C 58 44, 32 44, 28 47 Z" fill="#2D333B" stroke="#444C56" strokeWidth="1" />
+
+                {/* Glowing Embroidered < / > Code Symbol */}
+                <path d="M 41.5 52.5 L 39.5 54.5 L 41.5 56.5" fill="none" stroke="#58A6FF" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                <line x1="43.5" y1="57.5" x2="46.5" y2="51.5" stroke="#3FB950" strokeWidth="1.4" strokeLinecap="round" />
+                <path d="M 48.5 52.5 L 50.5 54.5 L 48.5 56.5" fill="none" stroke="#58A6FF" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+
+                {/* Crisp White Hoodie Drawstrings with Silver Metal Tips */}
+                <path d="M 38 49 Q 37 56 38 62" fill="none" stroke="#F0F6FC" strokeWidth="1.6" strokeLinecap="round" />
+                <rect x="37" y="61" width="2" height="3" rx="0.8" fill="#8B949E" />
+                <path d="M 52 49 Q 53 56 52 62" fill="none" stroke="#F0F6FC" strokeWidth="1.6" strokeLinecap="round" />
+                <rect x="51" y="61" width="2" height="3" rx="0.8" fill="#8B949E" />
               </g>
             )}
 
             {!hasActiveTool && pageTheme === 'video' && (
-              <g id="video-glasses">
-                <rect x="25" y="27" width="17" height="11" rx="2" fill="rgba(235, 87, 87, 0.6)" stroke="#FFFFFF" strokeWidth="2" />
-                <rect x="48" y="27" width="17" height="11" rx="2" fill="rgba(47, 128, 237, 0.6)" stroke="#FFFFFF" strokeWidth="2" />
-                <line x1="42" y1="31" x2="48" y2="31" stroke="#FFFFFF" strokeWidth="2.5" />
-                <path d="M 25 30 L 18 26" fill="none" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" />
-                <path d="M 65 30 L 72 26" fill="none" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" />
+              <g id="video-outfit">
+                {/* Cinema bowtie */}
+                <path d="M 38 52 L 52 52 L 45 57 Z" fill="#E50914" />
+                <path d="M 38 58 L 52 58 L 45 53 Z" fill="#E50914" />
+                <circle cx="45" cy="55" r="2" fill="#B20710" />
               </g>
             )}
 
-            {/* Snout/Nose */}
-            <ellipse cx="45" cy="43" rx="3.5" ry="2.5" fill="#3C2B25" />
+            {activeFeature === 'SCOUT' && (
+              <g id="scout-outfit">
+                {/* Trench coat collar/base */}
+                <path d="M 28 48 L 45 66 L 62 48 Z" fill="#8C7A6B" />
+                {/* White Shirt Collar */}
+                <path d="M 35 48 L 45 56 L 55 48 Z" fill="#FFFFFF" />
+                {/* Little red tie */}
+                <path d="M 43 51 L 47 51 L 45 64 Z" fill="#C0392B" />
+              </g>
+            )}
 
-            <g id="mouth">
-              {isHappy ? (
-                <path d="M 40 47 Q 45 53 50 47 Z" fill="#8B4513" />
-              ) : (
-                <path d="M 42 47 Q 45 49 48 47" fill="none" stroke="#3C2B25" strokeWidth="1.5" />
+            {isDesignerActive && (
+              <g id="designer-outfit">
+                {/* Black turtleneck */}
+                <path d="M 28 48 L 45 64 L 62 48 Z" fill="#2C3E50" />
+                {/* Higher neck part */}
+                <path d="M 35 45 L 45 52 L 55 45 Z" fill="#34495E" />
+              </g>
+            )}
+
+            {activeFeature === 'SKETCHER' && (
+              <g id="sketcher-outfit">
+                {/* Waist Tie Straps */}
+                <path d="M 31 65 L 34 65" fill="none" stroke="#E67E22" strokeWidth="2.5" />
+                <path d="M 56 65 L 59 65" fill="none" stroke="#E67E22" strokeWidth="2.5" />
+
+                {/* Apron Neck Loop */}
+                <path d="M 39 49 Q 45 56 51 49" fill="none" stroke="#E67E22" strokeWidth="2.5" />
+                <circle cx="39" cy="51" r="1.5" fill="#D35400" /> {/* Left Button */}
+                <circle cx="51" cy="51" r="1.5" fill="#D35400" /> {/* Right Button */}
+
+                {/* Apron Body */}
+                <path d="M 38 52 L 52 52 C 54 58, 56 60, 56 65 L 54 82 C 45 84, 45 84, 36 82 L 34 65 C 34 60, 36 58, 38 52 Z" fill="#2980B9" />
+
+                {/* White Stitching around Body */}
+                <path d="M 39 53 L 51 53 C 53 59, 55 61, 55 65 L 53 81 C 45 83, 45 83, 37 81 L 35 65 C 35 61, 37 59, 39 53 Z" fill="none" stroke="#AED6F1" strokeWidth="0.8" strokeDasharray="1.5, 1.5" />
+
+                {/* Apron Pocket */}
+                <path d="M 38 66 L 52 66 L 51 74 C 45 77, 45 77, 39 74 Z" fill="#2471A3" />
+                {/* White Stitching around Pocket */}
+                <path d="M 39 67 L 51 67 L 50 73 C 45 76, 45 76, 40 73 Z" fill="none" stroke="#AED6F1" strokeWidth="0.8" strokeDasharray="1.5, 1.5" />
+
+                {/* Paint splatters */}
+                <path d="M 36 60 Q 38 62 37 65 Q 35 63 36 60 Z" fill="#F1C40F" />
+                <circle cx="51" cy="58" r="2.5" fill="#E74C3C" />
+                <circle cx="49" cy="55" r="1" fill="#E74C3C" />
+
+                <circle cx="42" cy="78" r="3" fill="#2ECC71" />
+                <circle cx="46" cy="80" r="1.5" fill="#2ECC71" />
+
+                <path d="M 52 75 Q 54 78 51 79 Q 50 76 52 75 Z" fill="#9B59B6" />
+                <circle cx="54" cy="72" r="1.5" fill="#9B59B6" />
+              </g>
+            )}
+
+            {activeFeature === 'COMPRESSOR' && (
+              <g id="compressor-outfit">
+                {/* Base Vest (Neon Orange) */}
+                <path d="M 28 48 L 45 66 L 62 48 Z" fill="#E67E22" />
+                {/* Open front showing fur */}
+                <path d="M 38 48 L 45 58 L 52 48 Z" fill="#E07A3F" />
+                <path d="M 40 50 L 45 60 L 50 50 Z" fill="#FFF3E3" />
+                {/* Reflective Stripes */}
+                <path d="M 32 50 L 38 60 L 45 65 L 52 60 L 58 50" fill="none" stroke="#BDC3C7" strokeWidth="3.5" />
+              </g>
+            )}
+
+            {isScribeOpen && (
+              <g id="scribe-outfit">
+                {/* Brown Waistcoat */}
+                <path d="M 28 48 L 45 66 L 62 48 Z" fill="#8B4513" />
+                {/* Open front showing white shirt */}
+                <path d="M 35 48 L 45 62 L 55 48 Z" fill="#FFFFFF" />
+                {/* Red Bowtie */}
+                <path d="M 40 52 L 50 52 L 45 56 Z" fill="#C0392B" />
+                <path d="M 40 56 L 50 56 L 45 52 Z" fill="#C0392B" />
+                <circle cx="45" cy="54" r="1.5" fill="#922B21" />
+              </g>
+            )}
+
+            <g id="head" style={{ transformOrigin: '45px 35px' }}>
+              <g id="ears">
+                <g id="ear-left" style={{ transformOrigin: '25px 25px' }}>
+                  <path d="M 20 25 Q 15 10 18 2 Q 28 5 35 17 Z" fill="#E07A3F" />
+                  <path d="M 18 2 Q 22 5 24 10 L 19 12 Q 17 8 18 2 Z" fill="#3C2B25" />
+                  <path d="M 23 23 Q 19 12 20 6 Q 26 10 31 18 Z" fill="#FFF3E3" />
+                </g>
+
+                <g id="ear-right" style={{ transformOrigin: '65px 25px' }}>
+                  <path d="M 70 25 Q 75 10 72 2 Q 62 5 55 17 Z" fill="#E07A3F" />
+                  <path d="M 72 2 Q 68 5 66 10 L 71 12 Q 73 8 72 2 Z" fill="#3C2B25" />
+                  <path d="M 67 23 Q 71 12 70 6 Q 64 10 59 18 Z" fill="#FFF3E3" />
+                </g>
+              </g>
+
+              {/* Fox diamond-shaped head base */}
+              <path
+                d="M 45 15 C 20 15, 15 35, 20 45 C 25 55, 35 55, 45 55 C 55 55, 65 55, 70 45 C 75 35, 70 15, 45 15 Z"
+                fill="#E07A3F"
+              />
+
+              {/* Cheek tufts & lower face */}
+              <path
+                d="M 20 45 Q 15 50 25 48 Q 20 52 28 50 Q 35 55 45 55 Q 55 55 62 50 Q 70 52 65 48 Q 75 50 70 45 Z"
+                fill="#FFF3E3"
+              />
+
+              <g id="eyes-group">
+                {isSleeping ? (
+                  <g id="eyes-sleeping">
+                    <path d="M 30 33 Q 35 36 40 33" fill="none" stroke="#3C2B25" strokeWidth="1.5" strokeLinecap="round" />
+                    <path d="M 50 33 Q 55 36 60 33" fill="none" stroke="#3C2B25" strokeWidth="1.5" strokeLinecap="round" />
+                  </g>
+                ) : (
+                  <g id="eyes" className={isBlinking && !isHappy ? "mochi-eyes-blink" : ""}>
+                    {/* Left Eye */}
+                    <ellipse cx="35" cy="32" rx="5" ry="7" fill="#FFF" />
+                    <ellipse cx={36 + pupilOffset.x} cy={32 + pupilOffset.y} rx="3" ry="5" fill="#8B4513" />
+                    <circle cx={37 + pupilOffset.x} cy={30 + pupilOffset.y} r="1.5" fill="#FFF" />
+
+                    {/* Right Eye */}
+                    <ellipse cx="55" cy="32" rx="5" ry="7" fill="#FFF" />
+                    <ellipse cx={54 + pupilOffset.x} cy={32 + pupilOffset.y} rx="3" ry="5" fill="#8B4513" />
+                    <circle cx={53 + pupilOffset.x} cy={30 + pupilOffset.y} r="1.5" fill="#FFF" />
+                  </g>
+                )}
+              </g>
+
+              {activeFeature === 'SCOUT' && (
+                <g id="scout-glasses">
+                  {/* Glasses frame */}
+                  <circle cx="35" cy="32" r="8" fill="none" stroke="#2C3E50" strokeWidth="2.5" />
+                  <circle cx="55" cy="32" r="8" fill="none" stroke="#2C3E50" strokeWidth="2.5" />
+                  {/* Bridge */}
+                  <path d="M 43 32 L 47 32" fill="none" stroke="#2C3E50" strokeWidth="2.5" />
+                  {/* Arms */}
+                  <path d="M 27 32 L 20 28" fill="none" stroke="#2C3E50" strokeWidth="2" />
+                  <path d="M 63 32 L 70 28" fill="none" stroke="#2C3E50" strokeWidth="2" />
+                </g>
               )}
+
+              {isDesignerActive && (
+                <g id="designer-glasses">
+                  {/* Thick rectangular frames */}
+                  <rect x="25" y="25" width="16" height="12" rx="2" fill="none" stroke="#2C3E50" strokeWidth="3" />
+                  <rect x="49" y="25" width="16" height="12" rx="2" fill="none" stroke="#2C3E50" strokeWidth="3" />
+                  {/* Bridge */}
+                  <path d="M 41 29 L 49 29" fill="none" stroke="#2C3E50" strokeWidth="3" />
+                  {/* Arms */}
+                  <path d="M 25 29 L 18 25" fill="none" stroke="#2C3E50" strokeWidth="2" />
+                  <path d="M 65 29 L 72 25" fill="none" stroke="#2C3E50" strokeWidth="2" />
+                </g>
+              )}
+
+              {isDesignerActive && (
+                <g id="designer-beret">
+                  {/* Beret puffy top (droops to the right) */}
+                  <path d="M 31 14 C 25 0, 55 -5, 63 8 C 65 12, 63 16, 59 14 C 50 12, 40 12, 31 14 Z" fill="#C0392B" />
+                  {/* Beret Band */}
+                  <ellipse cx="45" cy="14" rx="14" ry="2.5" fill="#922B21" />
+                  {/* Stalk (Cabillou) */}
+                  <line x1="46" y1="3" x2="48" y2="0" stroke="#C0392B" strokeWidth="2" strokeLinecap="round" />
+                </g>
+              )}
+
+              {activeFeature === 'COMPRESSOR' && (
+                <g id="compressor-hardhat">
+                  {/* Helmet Dome */}
+                  <path d="M 32 20 C 32 5, 58 5, 58 20 Z" fill="#F1C40F" />
+                  {/* Helmet Brim */}
+                  <ellipse cx="45" cy="20" rx="18" ry="3" fill="#F39C12" />
+                  {/* Top Ridge */}
+                  <path d="M 45 8 L 45 18" fill="none" stroke="#F39C12" strokeWidth="2.5" strokeLinecap="round" />
+                  {/* Side Ridges */}
+                  <path d="M 38 12 L 36 19" fill="none" stroke="#F39C12" strokeWidth="1.5" strokeLinecap="round" />
+                  <path d="M 52 12 L 54 19" fill="none" stroke="#F39C12" strokeWidth="1.5" strokeLinecap="round" />
+                </g>
+              )}
+
+              {isScribeOpen && (
+                <g id="scribe-accessories">
+                  {/* Half moon reading glasses resting low */}
+                  <path d="M 32 37 A 6 6 0 0 0 42 37 Z" fill="rgba(255, 255, 255, 0.4)" stroke="#D4AC0D" strokeWidth="1.5" />
+                  <path d="M 48 37 A 6 6 0 0 0 58 37 Z" fill="rgba(255, 255, 255, 0.4)" stroke="#D4AC0D" strokeWidth="1.5" />
+                  <path d="M 42 37 Q 45 35 48 37" fill="none" stroke="#D4AC0D" strokeWidth="1.5" />
+                  {/* Arms */}
+                  <line x1="32" y1="37" x2="25" y2="30" stroke="#D4AC0D" strokeWidth="1.5" />
+                  <line x1="58" y1="37" x2="65" y2="30" stroke="#D4AC0D" strokeWidth="1.5" />
+                </g>
+              )}
+
+              {!hasActiveTool && pageTheme === 'music' && (
+                <g id="music-headphones">
+                  {/* Headband arch */}
+                  <path
+                    d="M 20 28 C 16 4, 74 4, 70 28"
+                    fill="none"
+                    stroke="#121212"
+                    strokeWidth="4.5"
+                    strokeLinecap="round"
+                  />
+                  {/* Neon accent band */}
+                  <path
+                    d="M 23 25 C 20 7, 70 7, 67 25"
+                    fill="none"
+                    stroke="#1DB954"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                  />
+                  {/* Left earcup */}
+                  <rect x="14" y="21" width="10" height="16" rx="5" fill="#181818" stroke="#121212" strokeWidth="1.2" />
+                  <rect x="16" y="23" width="6" height="12" rx="3" fill="#282828" />
+                  <circle cx="19" cy="29" r="1.5" fill="#1DB954" />
+
+                  {/* Right earcup */}
+                  <rect x="66" y="21" width="10" height="16" rx="5" fill="#181818" stroke="#121212" strokeWidth="1.2" />
+                  <rect x="68" y="23" width="6" height="12" rx="3" fill="#282828" />
+                  <circle cx="71" cy="29" r="1.5" fill="#1DB954" />
+                </g>
+              )}
+
+              {!hasActiveTool && pageTheme === 'dev' && (
+                <g id="dev-glasses">
+                  {/* Modern Blue-Light Developer Glasses framing eyes */}
+                  {/* Left Lens Frame */}
+                  <rect x="27" y="25" width="16" height="13" rx="3.5" fill="rgba(56, 139, 253, 0.08)" stroke="#2C3E50" strokeWidth="2.2" />
+                  {/* Right Lens Frame */}
+                  <rect x="47" y="25" width="16" height="13" rx="3.5" fill="rgba(56, 139, 253, 0.08)" stroke="#2C3E50" strokeWidth="2.2" />
+                  {/* Bridge */}
+                  <path d="M 43 29 Q 45 27.5 47 29" fill="none" stroke="#2C3E50" strokeWidth="2.2" />
+                  {/* Silver Frame Corner Rivets */}
+                  <circle cx="28.5" cy="27" r="0.7" fill="#BDC3C7" />
+                  <circle cx="61.5" cy="27" r="0.7" fill="#BDC3C7" />
+                  {/* Temple Arms */}
+                  <line x1="27" y1="28" x2="20" y2="26" stroke="#2C3E50" strokeWidth="2" strokeLinecap="round" />
+                  <line x1="63" y1="28" x2="70" y2="26" stroke="#2C3E50" strokeWidth="2" strokeLinecap="round" />
+                  {/* Anti-reflective Blue-Light Sheen Glints */}
+                  <path d="M 29 27.5 L 33 27.5" fill="none" stroke="#58A6FF" strokeWidth="1.2" strokeLinecap="round" opacity="0.85" />
+                  <path d="M 49 27.5 L 53 27.5" fill="none" stroke="#58A6FF" strokeWidth="1.2" strokeLinecap="round" opacity="0.85" />
+                </g>
+              )}
+
+              {!hasActiveTool && pageTheme === 'video' && (
+                <g id="video-glasses">
+                  <rect x="25" y="27" width="17" height="11" rx="2" fill="rgba(235, 87, 87, 0.6)" stroke="#FFFFFF" strokeWidth="2" />
+                  <rect x="48" y="27" width="17" height="11" rx="2" fill="rgba(47, 128, 237, 0.6)" stroke="#FFFFFF" strokeWidth="2" />
+                  <line x1="42" y1="31" x2="48" y2="31" stroke="#FFFFFF" strokeWidth="2.5" />
+                  <path d="M 25 30 L 18 26" fill="none" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" />
+                  <path d="M 65 30 L 72 26" fill="none" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" />
+                </g>
+              )}
+
+              {/* Snout/Nose */}
+              <ellipse cx="45" cy="43" rx="3.5" ry="2.5" fill="#3C2B25" />
+
+              <g id="mouth">
+                {isHappy ? (
+                  <path d="M 40 47 Q 45 53 50 47 Z" fill="#8B4513" />
+                ) : (
+                  <path d="M 42 47 Q 45 49 48 47" fill="none" stroke="#3C2B25" strokeWidth="1.5" />
+                )}
+              </g>
             </g>
-          </g>
-        </svg>
-      </div>
+          </svg>
+        </div>
       )}
     </div>
   );
