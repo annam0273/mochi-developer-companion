@@ -3,11 +3,33 @@
   bottom: 0px; 
   right: -10px; /* Prevent clipping off the screen edge */
   width: 340px;
+  max-width: calc(100vw - 20px);
   height: 90px;
   z-index: 1000;
   
   /* Smooth slide up transition */
   animation: mochi-board-slide-up 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+/* Flipped alignment when Nick is on the left side of the screen */
+.mochi-companion-container.align-left .mochi-fox-menu,
+.mochi-fox-menu.align-left {
+  right: auto;
+  left: -10px;
+}
+
+.mochi-companion-container.align-left .mochi-fox-menu .mochi-board-paw.paw-left,
+.mochi-fox-menu.align-left .mochi-board-paw.paw-left {
+  right: auto;
+  left: 60px;
+  transform: rotate(-10deg);
+}
+
+.mochi-companion-container.align-left .mochi-fox-menu .mochi-board-paw.paw-right,
+.mochi-fox-menu.align-left .mochi-board-paw.paw-right {
+  right: auto;
+  left: 120px;
+  transform: rotate(10deg);
 }
 
 @keyframes mochi-board-slide-up {

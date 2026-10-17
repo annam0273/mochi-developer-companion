@@ -2,7 +2,23 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { browserAPI } from '../../../core/browser';
 
 export function useMovement() {
-  const [cornerPos, setCornerPos] = useState({ x: 0, y: 0 }); // Corner position
+  const [cornerPos, setCornerPos] = useState(() => {
+    try {
+      const saved = localStorage.getItem('nick_corner_pos');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed?.x === 'number' && typeof parsed?.y === 'number') {
+          const minX = -(window.innerWidth - 180);
+          const minY = -(window.innerHeight - 180);
+          return {
+            x: Math.max(minX, Math.min(0, parsed.x)),
+            y: Math.max(minY, Math.min(0, parsed.y)),
+          };
+        }
+      }
+    } catch {}
+    return { x: 0, y: 0 };
+  }); // Corner position
   const [charOffset, setCharOffset] = useState({ x: 0, y: 0 }); // Fox offset from corner
   const [rotation, setRotation] = useState(0);
   const [facingRight, setFacingRight] = useState(false);
@@ -32,6 +48,91 @@ export function useMovement() {
   const retreatTimeoutRef = useRef(null);
   const transitionTimerRef = useRef(null);
   const isTransitioningRef = useRef(false);
+
+  // Load saved position globally & sync across tabs
+  useEffect(() => {
+    let isMounted = true;
+
+    // Load from extension storage (cross-domain & cross-tab)
+    browserAPI.storage.local.get(['nick_corner_pos']).then((res) => {
+      if (isMounted && res && res.nick_corner_pos) {
+        const { x, y } = res.nick_corner_pos;
+        if (typeof x === 'number' && typeof y === 'number') {
+          const minX = -(window.innerWidth - 180);
+          const minY = -(window.innerHeight - 180);
+          const clamped = {
+            x: Math.max(minX, Math.min(0, x)),
+            y: Math.max(minY, Math.min(0, y)),
+          };
+          setCornerPos(clamped);
+          try {
+            localStorage.setItem('nick_corner_pos', JSON.stringify(clamped));
+          } catch {}
+        }
+      }
+    }).catch(() => {});
+
+    // Listen for cross-tab position changes
+    const handleStorageChange = (changes, areaName) => {
+      if (changes && changes.nick_corner_pos && !isDraggingRef.current) {
+        const newPos = changes.nick_corner_pos.newValue;
+        if (newPos && typeof newPos.x === 'number' && typeof newPos.y === 'number') {
+          const minX = -(window.innerWidth - 180);
+          const minY = -(window.innerHeight - 180);
+          const clamped = {
+            x: Math.max(minX, Math.min(0, newPos.x)),
+            y: Math.max(minY, Math.min(0, newPos.y)),
+          };
+          setCornerPos(clamped);
+          try {
+            localStorage.setItem('nick_corner_pos', JSON.stringify(clamped));
+          } catch {}
+        }
+      }
+    };
+    browserAPI.storage.local.onChanged.addListener(handleStorageChange);
+
+    // Same-origin window storage listener
+    const handleWindowStorage = (e) => {
+      if (e.key === 'nick_corner_pos' && !isDraggingRef.current && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (typeof parsed?.x === 'number' && typeof parsed?.y === 'number') {
+            const minX = -(window.innerWidth - 180);
+            const minY = -(window.innerHeight - 180);
+            setCornerPos({
+              x: Math.max(minX, Math.min(0, parsed.x)),
+              y: Math.max(minY, Math.min(0, parsed.y)),
+            });
+          }
+        } catch {}
+      }
+    };
+    window.addEventListener('storage', handleWindowStorage);
+
+    // Keep within screen bounds when window is resized
+    const handleResize = () => {
+      if (isDraggingRef.current) return;
+      const minX = -(window.innerWidth - 180);
+      const minY = -(window.innerHeight - 180);
+      setCornerPos((prev) => {
+        const clampedX = Math.max(minX, Math.min(0, prev.x));
+        const clampedY = Math.max(minY, Math.min(0, prev.y));
+        if (clampedX !== prev.x || clampedY !== prev.y) {
+          return { x: clampedX, y: clampedY };
+        }
+        return prev;
+      });
+    };
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      isMounted = false;
+      browserAPI.storage.local.onChanged.removeListener(handleStorageChange);
+      window.removeEventListener('storage', handleWindowStorage);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
 
   const clearAllPeekTimeouts = useCallback(() => {
     if (scheduleTimeoutRef.current) clearTimeout(scheduleTimeoutRef.current);
@@ -95,6 +196,13 @@ export function useMovement() {
       }
 
       setIsDragging(false);
+
+      // Persist dragged position globally
+      const finalPos = cornerPosRef.current;
+      try {
+        localStorage.setItem('nick_corner_pos', JSON.stringify(finalPos));
+      } catch {}
+      browserAPI.storage.local.set({ nick_corner_pos: finalPos }).catch(() => {});
       
       if (modeRef.current === 'task') {
         setTransitionDuration(0.5);
@@ -302,7 +410,14 @@ export function useMovement() {
     }
 
     const handleVisibility = () => {
-      if (!document.hidden && modeRef.current === 'peeking') {
+      if (document.hidden) {
+        clearAllPeekTimeouts();
+        if (modeRef.current === 'peeking') {
+          // Keep quietly in hide position while tab is in background
+          setTransitionDuration(0);
+          setCharOffset({ x: 0, y: 170 });
+        }
+      } else if (modeRef.current === 'peeking') {
         clearAllPeekTimeouts();
         scheduleNextPeek(true);
       }

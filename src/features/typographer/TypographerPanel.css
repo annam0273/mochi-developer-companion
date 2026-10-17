@@ -14,6 +14,12 @@
   font-family: 'Courier New', Courier, monospace;
 }
 
+.mochi-companion-container.align-left .mochi-typographer-panel,
+.mochi-typographer-panel.align-left {
+  right: auto !important;
+  left: 120% !important;
+}
+
 .mochi-typographer-header {
   display: flex;
   justify-content: space-between;

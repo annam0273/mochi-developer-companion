@@ -7,14 +7,23 @@ export default function ScoutPanel({ onClose, onDockChange }) {
   const data = useScout(true);
   const [activeTab, setActiveTab] = useState('preview');
   const [copied, setCopied] = useState('');
-  const [isDocked, setIsDocked] = useState(false);
+  const [isDocked, setIsDocked] = useState(() => {
+    try {
+      const local = localStorage.getItem('mochiScoutDocked');
+      if (local !== null) return local === 'true';
+    } catch {}
+    return false;
+  });
   const [showInfo, setShowInfo] = useState(false);
 
   useEffect(() => {
     try {
       chrome.storage.local.get(['mochiScoutDocked'], (res) => {
-        if (res.mochiScoutDocked !== undefined) {
+        if (res && res.mochiScoutDocked !== undefined) {
           setIsDocked(res.mochiScoutDocked);
+          try {
+            localStorage.setItem('mochiScoutDocked', String(res.mochiScoutDocked));
+          } catch {}
         }
       });
     } catch {}
@@ -23,6 +32,7 @@ export default function ScoutPanel({ onClose, onDockChange }) {
   useEffect(() => {
     try {
       chrome.storage.local.set({ mochiScoutDocked: isDocked });
+      localStorage.setItem('mochiScoutDocked', String(isDocked));
     } catch {}
     
     if (isDocked) {

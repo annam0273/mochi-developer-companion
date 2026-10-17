@@ -62,18 +62,38 @@ export function useSleep(isManualSleep = false) {
       idleTimeout = setTimeout(() => setIsSleeping(true), 15000);
     };
 
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // In background tabs, immediately go to quiet rest
+        setIsSleeping(true);
+        clearTimeout(idleTimeout);
+      } else {
+        // When tab is active again, wake up from idle rest if not manually asleep
+        resetIdle();
+      }
+    };
+
     window.addEventListener('mousemove', resetIdle, { passive: true });
     window.addEventListener('keydown', resetIdle);
     window.addEventListener('click', resetIdle);
     window.addEventListener('scroll', resetIdle, { passive: true });
+    window.addEventListener('focus', resetIdle);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    resetIdle(); // Start timer
+    // Initial check: if already hidden on mount, sleep; otherwise start idle timer
+    if (document.hidden) {
+      setIsSleeping(true);
+    } else {
+      resetIdle(); // Start timer
+    }
 
     return () => {
       window.removeEventListener('mousemove', resetIdle);
       window.removeEventListener('keydown', resetIdle);
       window.removeEventListener('click', resetIdle);
       window.removeEventListener('scroll', resetIdle);
+      window.removeEventListener('focus', resetIdle);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       clearTimeout(idleTimeout);
     };
   }, []);

@@ -40,6 +40,12 @@ body.scribe-docked-active .mochi-companion-container {
   box-sizing: border-box;
 }
 
+.mochi-companion-container.align-left .mochi-scribe-panel-large:not(.docked),
+.mochi-scribe-panel-large.align-left:not(.docked) {
+  right: auto !important;
+  left: 170px !important;
+}
+
 .mochi-scribe-panel-large.docked {
   position: fixed !important;
   top: 0 !important;
@@ -341,8 +347,18 @@ body.scribe-docked-active .mochi-companion-container {
   z-index: 10;
 }
 
-.mochi-scribe-title-input {
+.mochi-scribe-composer-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   width: 100%;
+  margin-top: 4px;
+}
+
+.mochi-scribe-title-input {
+  flex: 1;
+  min-width: 0;
   border: none;
   background: transparent;
   font-family: 'Inter', system-ui, sans-serif;
@@ -352,10 +368,34 @@ body.scribe-docked-active .mochi-companion-container {
   padding: 8px 0;
   outline: none;
   border-bottom: 2px dashed rgba(60, 43, 37, 0.2);
-  margin-top: 4px;
 }
 .mochi-scribe-title-input::placeholder {
   color: #B8A89A;
+}
+
+.mochi-scribe-autosave-tag {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+  user-select: none;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mochi-scribe-autosave-tag.saved {
+  color: #2B8A3E;
+  background: rgba(43, 138, 62, 0.12);
+  border: 1px solid rgba(43, 138, 62, 0.25);
+}
+
+.mochi-scribe-autosave-tag.saving {
+  color: #E07A3F;
+  background: rgba(224, 122, 63, 0.12);
+  border: 1px solid rgba(224, 122, 63, 0.25);
 }
 
 .mochi-scribe-textarea {
@@ -1737,4 +1777,88 @@ p.scribe-after-table:empty::before {
   align-items: center;
   gap: 6px;
   margin-right: auto;
+}
+
+/* Disabled state for toolbar buttons (Undo / Redo) */
+.mochi-scribe-rich-toolbar button:disabled,
+.toolbar-btn-icon:disabled {
+  opacity: 0.35 !important;
+  cursor: not-allowed !important;
+  pointer-events: none !important;
+}
+
+/* Recycle Bin Navigation & Badges */
+.mochi-scribe-nav-bottom {
+  margin-top: auto;
+  padding-bottom: 4px;
+}
+
+.trash-item:hover {
+  background: rgba(217, 56, 58, 0.15) !important;
+  color: #D9383A !important;
+}
+
+.trash-item.active {
+  background: #D9383A !important;
+  border-color: #3C2B25 !important;
+  color: #FFF3E3 !important;
+}
+
+.trash-badge {
+  background: #D9383A !important;
+  color: #FFF3E3 !important;
+}
+
+/* Empty Trash Button */
+.mochi-scribe-empty-trash-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #FFF3E3;
+  color: #D9383A;
+  border: 2px solid #D9383A;
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mochi-scribe-empty-trash-btn:hover {
+  background: #D9383A;
+  color: #FFF3E3;
+  transform: translateY(-1px);
+}
+
+/* Recycle Bin Note Cards */
+.mochi-scribe-card-rich.trash-card {
+  opacity: 0.9;
+  border-style: dashed;
+  cursor: default;
+}
+
+.mochi-scribe-card-rich.trash-card:hover {
+  transform: none;
+  box-shadow: 2px 2px 0px #3C2B25;
+}
+
+.card-rich-action-btn.card-rich-restore {
+  color: #2F855A;
+}
+
+.card-rich-action-btn.card-rich-restore:hover {
+  background: #E6F4EA;
+  border-color: #2F855A;
+  color: #1E663B;
+}
+
+.card-rich-action-btn.card-rich-delete-perm {
+  color: #D9383A;
+}
+
+.card-rich-action-btn.card-rich-delete-perm:hover {
+  background: #FDEDED;
+  border-color: #D9383A;
+  color: #B91C1C;
 }

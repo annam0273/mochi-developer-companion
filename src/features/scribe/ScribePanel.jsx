@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { getNotebooks, saveNotebooks } from '../../core/storage/scribe';
+import { getNotebooks, saveNotebooks, getTrash, saveTrash } from '../../core/storage/scribe';
 import './ScribePanel.css';
 
 const HIGHLIGHT_COLORS = [
@@ -22,13 +22,147 @@ const TEXT_COLORS = [
 ];
 
 export default function ScribePanel({ onClose, onDockChange }) {
+  const savedCompose = (() => {
+    try {
+      const str = sessionStorage.getItem('nick_scribe_composing_state');
+      if (str) {
+        const parsed = JSON.parse(str);
+        if (parsed && parsed.isComposing) return parsed;
+      }
+    } catch {}
+    return null;
+  })();
+
   const [notebooks, setNotebooks] = useState({ global: [] });
-  const [activeTab, setActiveTab] = useState('global');
-  const [newNoteTitle, setNewNoteTitle] = useState('');
-  const [newNoteContent, setNewNoteContent] = useState('');
-  const [editingNoteId, setEditingNoteId] = useState(null);
-  const [isComposing, setIsComposing] = useState(false);
-  const [isDocked, setIsDocked] = useState(false);
+  const [trash, setTrash] = useState([]);
+  const [activeTab, setActiveTab] = useState(() => savedCompose?.tab || window.location.hostname || 'global');
+  const [newNoteTitle, setNewNoteTitle] = useState(() => savedCompose?.title || '');
+  const [newNoteContent, setNewNoteContent] = useState(() => savedCompose?.content || '');
+  const [editingNoteId, setEditingNoteId] = useState(() => savedCompose?.editingNoteId || null);
+  const [isComposing, setIsComposing] = useState(() => Boolean(savedCompose?.isComposing));
+  const [saveStatus, setSaveStatus] = useState('saved'); // 'saved' | 'saving'
+  const autoSaveTimerRef = useRef(null);
+  const isComposingRef = useRef(isComposing);
+  isComposingRef.current = isComposing;
+  const editingNoteIdRef = useRef(editingNoteId);
+  editingNoteIdRef.current = editingNoteId;
+  const newNoteTitleRef = useRef(newNoteTitle);
+  newNoteTitleRef.current = newNoteTitle;
+  const newNoteContentRef = useRef(newNoteContent);
+  newNoteContentRef.current = newNoteContent;
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
+
+  // Undo & Redo History State
+  const historyRef = useRef([{ title: savedCompose?.title || '', content: savedCompose?.content || '' }]);
+  const historyIndexRef = useRef(0);
+  const isUndoRedoingRef = useRef(false);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+  const typingTimerRef = useRef(null);
+
+  const updateUndoRedoState = useCallback(() => {
+    setCanUndo(historyIndexRef.current > 0);
+    setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
+  }, []);
+
+  const pushHistorySnapshot = useCallback((title, content, forceImmediate = false) => {
+    if (isUndoRedoingRef.current) return;
+
+    const saveSnapshot = () => {
+      const currentSnap = historyRef.current[historyIndexRef.current];
+      if (currentSnap && currentSnap.title === title && currentSnap.content === content) {
+        return;
+      }
+
+      const nextHistory = historyRef.current.slice(0, historyIndexRef.current + 1);
+      nextHistory.push({ title, content });
+      if (nextHistory.length > 50) {
+        nextHistory.shift();
+      }
+      historyRef.current = nextHistory;
+      historyIndexRef.current = nextHistory.length - 1;
+      updateUndoRedoState();
+    };
+
+    if (forceImmediate) {
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      saveSnapshot();
+    } else {
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = setTimeout(saveSnapshot, 350);
+    }
+  }, [updateUndoRedoState]);
+
+  const initHistory = useCallback((title, content) => {
+    historyRef.current = [{ title, content }];
+    historyIndexRef.current = 0;
+    updateUndoRedoState();
+  }, [updateUndoRedoState]);
+
+  const handleUndo = useCallback(() => {
+    if (historyIndexRef.current <= 0) return;
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+
+    isUndoRedoingRef.current = true;
+    historyIndexRef.current -= 1;
+    const snap = historyRef.current[historyIndexRef.current];
+    if (snap) {
+      setNewNoteTitle(snap.title);
+      setNewNoteContent(snap.content);
+      if (editorRef.current) {
+        editorRef.current.innerHTML = snap.content;
+      }
+    }
+    updateUndoRedoState();
+    setTimeout(() => {
+      isUndoRedoingRef.current = false;
+    }, 40);
+  }, [updateUndoRedoState]);
+
+  const handleRedo = useCallback(() => {
+    if (historyIndexRef.current >= historyRef.current.length - 1) return;
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+
+    isUndoRedoingRef.current = true;
+    historyIndexRef.current += 1;
+    const snap = historyRef.current[historyIndexRef.current];
+    if (snap) {
+      setNewNoteTitle(snap.title);
+      setNewNoteContent(snap.content);
+      if (editorRef.current) {
+        editorRef.current.innerHTML = snap.content;
+      }
+    }
+    updateUndoRedoState();
+    setTimeout(() => {
+      isUndoRedoingRef.current = false;
+    }, 40);
+  }, [updateUndoRedoState]);
+
+  const handleTitleKeyDown = (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+      e.preventDefault();
+      handleUndo();
+      return;
+    }
+    if (
+      ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') ||
+      ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z')
+    ) {
+      e.preventDefault();
+      handleRedo();
+      return;
+    }
+  };
+
+  const [isDocked, setIsDocked] = useState(() => {
+    try {
+      const local = localStorage.getItem('mochiScribeDocked');
+      if (local !== null) return local === 'true';
+    } catch {}
+    return false;
+  });
   const [activeFormats, setActiveFormats] = useState({});
   const [fullscreenImage, setFullscreenImage] = useState(null);
   const [imageZoom, setImageZoom] = useState(1);
@@ -43,6 +177,18 @@ export default function ScribePanel({ onClose, onDockChange }) {
   const lastTableActionTimeRef = useRef(0);
 
   const currentDomain = window.location.hostname;
+
+  // Load persistent Recycle Bin
+  useEffect(() => {
+    getTrash().then(trashItems => {
+      setTrash(Array.isArray(trashItems) ? trashItems : []);
+    });
+  }, []);
+
+  // Save persistent Recycle Bin on change
+  useEffect(() => {
+    saveTrash(trash);
+  }, [trash]);
 
   useEffect(() => {
     const handleOutsideClick = (e) => {
@@ -126,8 +272,11 @@ export default function ScribePanel({ onClose, onDockChange }) {
   useEffect(() => {
     try {
       chrome.storage.local.get(['mochiScribeDocked'], (res) => {
-        if (res.mochiScribeDocked !== undefined) {
+        if (res && res.mochiScribeDocked !== undefined) {
           setIsDocked(res.mochiScribeDocked);
+          try {
+            localStorage.setItem('mochiScribeDocked', String(res.mochiScribeDocked));
+          } catch {}
         }
       });
     } catch { /* ignore */ }
@@ -136,6 +285,7 @@ export default function ScribePanel({ onClose, onDockChange }) {
   useEffect(() => {
     try {
       chrome.storage.local.set({ mochiScribeDocked: isDocked });
+      localStorage.setItem('mochiScribeDocked', String(isDocked));
     } catch { /* ignore */ }
 
     if (isDocked) {
@@ -188,10 +338,40 @@ export default function ScribePanel({ onClose, onDockChange }) {
       }
 
       if (!loaded.global) loaded.global = [];
+
+      const targetTab = savedCompose?.tab || currentDomain;
+      if (targetTab && !loaded[targetTab]) {
+        loaded[targetTab] = [];
+      }
+
+      // If we restored a note being edited, ensure it is in loaded notebooks
+      if (savedCompose?.isComposing && savedCompose?.editingNoteId) {
+        const tabList = loaded[targetTab] || [];
+        const existingIdx = tabList.findIndex(n => n.id === savedCompose.editingNoteId);
+        if (existingIdx !== -1) {
+          if (savedCompose.title || savedCompose.content) {
+            tabList[existingIdx] = {
+              ...tabList[existingIdx],
+              title: savedCompose.title !== undefined ? savedCompose.title : tabList[existingIdx].title,
+              content: savedCompose.content !== undefined ? savedCompose.content : tabList[existingIdx].content,
+              timestamp: Date.now()
+            };
+          }
+        } else if (savedCompose.title || savedCompose.content) {
+          tabList.unshift({
+            id: savedCompose.editingNoteId,
+            title: savedCompose.title || '',
+            content: savedCompose.content || '',
+            timestamp: Date.now()
+          });
+        }
+        loaded[targetTab] = tabList;
+      }
+
       setNotebooks(loaded);
 
-      // Auto-switch to current domain if not empty, or initialize it
-      if (currentDomain) {
+      // Auto-switch to current domain ONLY if not actively composing
+      if (!savedCompose?.isComposing && currentDomain) {
         setActiveTab(currentDomain);
         setNewNoteTitle('');
         setNewNoteContent('');
@@ -209,40 +389,145 @@ export default function ScribePanel({ onClose, onDockChange }) {
     saveNotebooks(notebooks);
   }, [notebooks]);
 
+  // Live auto-save whenever title or content changes while composing
+  useEffect(() => {
+    if (!isComposing) return;
+
+    // Immediately persist current composing draft into sessionStorage
+    try {
+      sessionStorage.setItem('nick_scribe_composing_state', JSON.stringify({
+        isComposing: true,
+        editingNoteId: editingNoteIdRef.current,
+        tab: activeTab,
+        title: newNoteTitle,
+        content: newNoteContent,
+        timestamp: Date.now()
+      }));
+    } catch {}
+
+    // Only auto-save to notebooks if there's actual title or content
+    if (!newNoteTitle.trim() && !newNoteContent.trim()) {
+      return;
+    }
+
+    setSaveStatus('saving');
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+
+    autoSaveTimerRef.current = setTimeout(() => {
+      // Ensure we have a persistent note ID
+      let noteId = editingNoteIdRef.current;
+      if (!noteId) {
+        noteId = 'note_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 5);
+        setEditingNoteId(noteId);
+        editingNoteIdRef.current = noteId;
+        try {
+          sessionStorage.setItem('nick_scribe_composing_state', JSON.stringify({
+            isComposing: true,
+            editingNoteId: noteId,
+            tab: activeTab,
+            title: newNoteTitle,
+            content: newNoteContent,
+            timestamp: Date.now()
+          }));
+        } catch {}
+      }
+
+      setNotebooks(prev => {
+        const currentList = prev[activeTab] || [];
+        const exists = currentList.some(n => n.id === noteId);
+        if (exists) {
+          return {
+            ...prev,
+            [activeTab]: currentList.map(n =>
+              n.id === noteId
+                ? { ...n, title: newNoteTitle, content: newNoteContent, timestamp: Date.now() }
+                : n
+            )
+          };
+        } else {
+          return {
+            ...prev,
+            [activeTab]: [
+              {
+                id: noteId,
+                title: newNoteTitle,
+                content: newNoteContent,
+                timestamp: Date.now()
+              },
+              ...currentList
+            ]
+          };
+        }
+      });
+
+      setSaveStatus('saved');
+    }, 350);
+
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, [isComposing, newNoteTitle, newNoteContent, activeTab]);
+
+  // Flush composing state on page unload/refresh
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (isComposingRef.current) {
+        try {
+          sessionStorage.setItem('nick_scribe_composing_state', JSON.stringify({
+            isComposing: true,
+            editingNoteId: editingNoteIdRef.current,
+            tab: activeTabRef.current,
+            title: newNoteTitleRef.current,
+            content: newNoteContentRef.current,
+            timestamp: Date.now()
+          }));
+        } catch {}
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
+
   const handleTabChange = (newTab) => {
     setActiveTab(newTab);
     setNewNoteTitle('');
     setNewNoteContent('');
     setEditingNoteId(null);
     setIsComposing(false);
+    initHistory('', '');
+    try {
+      sessionStorage.removeItem('nick_scribe_composing_state');
+    } catch {}
   };
 
   const handleAddNote = () => {
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+
     if (!newNoteTitle.trim() && !newNoteContent.trim()) {
-      setIsComposing(false);
+      cancelEdit();
       return;
     }
 
+    const noteId = editingNoteIdRef.current || ('note_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 5));
+
     setNotebooks(prev => {
       const currentList = prev[activeTab] || [];
-
-      if (editingNoteId) {
-        // Update existing note
+      const exists = currentList.some(n => n.id === noteId);
+      if (exists) {
         return {
           ...prev,
           [activeTab]: currentList.map(n =>
-            n.id === editingNoteId
+            n.id === noteId
               ? { ...n, title: newNoteTitle, content: newNoteContent, timestamp: Date.now() }
               : n
           )
         };
       } else {
-        // Create new note
         return {
           ...prev,
           [activeTab]: [
             {
-              id: Math.random().toString(36).substr(2, 9),
+              id: noteId,
               title: newNoteTitle,
               content: newNoteContent,
               timestamp: Date.now()
@@ -257,16 +542,34 @@ export default function ScribePanel({ onClose, onDockChange }) {
     setNewNoteContent('');
     setEditingNoteId(null);
     setIsComposing(false);
+    initHistory('', '');
+    try {
+      sessionStorage.removeItem('nick_scribe_composing_state');
+    } catch {}
   };
 
   const handleEditNote = (note, domain) => {
+    if (activeTab === 'trash') return; // Cannot edit notes in Recycle Bin directly
+    const targetDomain = (activeTab === 'all' && domain) ? domain : activeTab;
     if (activeTab === 'all' && domain) {
       setActiveTab(domain);
     }
     setNewNoteTitle(note.title || '');
     setNewNoteContent(note.content || '');
+    initHistory(note.title || '', note.content || '');
     setEditingNoteId(note.id);
     setIsComposing(true);
+    setSaveStatus('saved');
+    try {
+      sessionStorage.setItem('nick_scribe_composing_state', JSON.stringify({
+        isComposing: true,
+        editingNoteId: note.id,
+        tab: targetDomain,
+        title: note.title || '',
+        content: note.content || '',
+        timestamp: Date.now()
+      }));
+    } catch {}
   };
 
   const getFormatBlock = () => {
@@ -344,7 +647,9 @@ export default function ScribePanel({ onClose, onDockChange }) {
   const handleFormat = (command, value = null) => {
     editorRef.current?.focus();
     document.execCommand(command, false, value);
-    setNewNoteContent(editorRef.current?.innerHTML || '');
+    const updated = editorRef.current?.innerHTML || '';
+    setNewNoteContent(updated);
+    pushHistorySnapshot(newNoteTitleRef.current, updated, true);
     updateFormattingState();
   };
 
@@ -357,7 +662,9 @@ export default function ScribePanel({ onClose, onDockChange }) {
     } else {
       document.execCommand('formatBlock', false, `<${level.toUpperCase()}>`);
     }
-    setNewNoteContent(editorRef.current?.innerHTML || '');
+    const updated = editorRef.current?.innerHTML || '';
+    setNewNoteContent(updated);
+    pushHistorySnapshot(newNoteTitleRef.current, updated, true);
     updateFormattingState();
   };
 
@@ -370,7 +677,9 @@ export default function ScribePanel({ onClose, onDockChange }) {
       // Toggle on with chosen highlight color
       document.execCommand('hiliteColor', false, highlightColor);
     }
-    setNewNoteContent(editorRef.current?.innerHTML || '');
+    const updated = editorRef.current?.innerHTML || '';
+    setNewNoteContent(updated);
+    pushHistorySnapshot(newNoteTitleRef.current, updated, true);
     updateFormattingState();
   };
 
@@ -383,7 +692,9 @@ export default function ScribePanel({ onClose, onDockChange }) {
       document.execCommand('hiliteColor', false, color);
     }
     setActiveDropdown(null);
-    setNewNoteContent(editorRef.current?.innerHTML || '');
+    const updated = editorRef.current?.innerHTML || '';
+    setNewNoteContent(updated);
+    pushHistorySnapshot(newNoteTitleRef.current, updated, true);
     updateFormattingState();
   };
 
@@ -392,7 +703,9 @@ export default function ScribePanel({ onClose, onDockChange }) {
     setTextColor(color);
     document.execCommand('foreColor', false, color);
     setActiveDropdown(null);
-    setNewNoteContent(editorRef.current?.innerHTML || '');
+    const updated = editorRef.current?.innerHTML || '';
+    setNewNoteContent(updated);
+    pushHistorySnapshot(newNoteTitleRef.current, updated, true);
     updateFormattingState();
   };
 
@@ -1160,6 +1473,23 @@ export default function ScribePanel({ onClose, onDockChange }) {
   const handleEditorKeyDown = (e) => {
     updateFormattingState();
 
+    // Undo (Ctrl+Z or Cmd+Z)
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+      e.preventDefault();
+      handleUndo();
+      return;
+    }
+
+    // Redo (Ctrl+Y or Ctrl+Shift+Z or Cmd+Shift+Z)
+    if (
+      ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') ||
+      ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z')
+    ) {
+      e.preventDefault();
+      handleRedo();
+      return;
+    }
+
     // Blur table title when Enter is pressed
     if (e.target?.classList?.contains('tbl-title-editable') && e.key === 'Enter') {
       e.preventDefault();
@@ -1442,19 +1772,69 @@ export default function ScribePanel({ onClose, onDockChange }) {
   };
 
   const cancelEdit = () => {
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     setNewNoteTitle('');
     setNewNoteContent('');
+    initHistory('', '');
     setEditingNoteId(null);
     setIsComposing(false);
+    try {
+      sessionStorage.removeItem('nick_scribe_composing_state');
+    } catch {}
   };
 
   const handleDeleteNote = (tab, id, e) => {
-    e.stopPropagation(); // prevent edit trigger
+    e?.stopPropagation?.(); // prevent edit trigger
+    const noteToDelete = (notebooks[tab] || []).find(n => n.id === id);
+    if (!noteToDelete) return;
+
+    const trashedNote = {
+      ...noteToDelete,
+      originalTab: tab,
+      deletedAt: Date.now()
+    };
+
+    setTrash(prev => [trashedNote, ...prev.filter(n => n.id !== id)]);
+
     setNotebooks(prev => ({
       ...prev,
-      [tab]: prev[tab].filter(n => n.id !== id)
+      [tab]: (prev[tab] || []).filter(n => n.id !== id)
     }));
-    if (editingNoteId === id) cancelEdit();
+
+    if (editingNoteIdRef.current === id) cancelEdit();
+  };
+
+  const handleRestoreNote = (id, e) => {
+    e?.stopPropagation?.();
+    const noteToRestore = trash.find(n => n.id === id);
+    if (!noteToRestore) return;
+
+    const targetTab = noteToRestore.originalTab || 'global';
+    const cleanNote = {
+      id: noteToRestore.id,
+      title: noteToRestore.title || '',
+      content: noteToRestore.content || '',
+      timestamp: noteToRestore.timestamp || Date.now()
+    };
+
+    setNotebooks(prev => ({
+      ...prev,
+      [targetTab]: [cleanNote, ...(prev[targetTab] || [])]
+    }));
+
+    setTrash(prev => prev.filter(n => n.id !== id));
+  };
+
+  const handlePermanentDelete = (id, e) => {
+    e?.stopPropagation?.();
+    setTrash(prev => prev.filter(n => n.id !== id));
+  };
+
+  const handleEmptyTrash = () => {
+    if (trash.length === 0) return;
+    if (window.confirm('Are you sure you want to permanently empty the Recycle Bin? All deleted notes will be permanently removed.')) {
+      setTrash([]);
+    }
   };
 
   const tabs = Object.keys(notebooks);
@@ -1468,7 +1848,11 @@ export default function ScribePanel({ onClose, onDockChange }) {
   });
   allNotes.sort((a, b) => b.timestamp - a.timestamp);
 
-  const activeNotes = activeTab === 'all' ? allNotes : (notebooks[activeTab] || []);
+  const activeNotes = activeTab === 'all'
+    ? allNotes
+    : activeTab === 'trash'
+      ? trash
+      : (notebooks[activeTab] || []);
 
   return createPortal(
     <div
@@ -1548,8 +1932,8 @@ export default function ScribePanel({ onClose, onDockChange }) {
                   </button>
                 )}
 
-                {tabs.filter(t => t !== 'global').map(tab => {
-                  const count = notebooks[tab].length;
+                {tabs.filter(t => t !== 'global' && t !== 'trash').map(tab => {
+                  const count = (notebooks[tab] || []).length;
                   if (count === 0 && tab !== currentDomain) return null;
                   return (
                     <button
@@ -1569,6 +1953,27 @@ export default function ScribePanel({ onClose, onDockChange }) {
                 })}
               </div>
             </div>
+
+            <div className="mochi-scribe-nav-section mochi-scribe-nav-bottom">
+              <div className="mochi-scribe-sidebar-divider" />
+              <button
+                className={`mochi-scribe-nav-item trash-item ${activeTab === 'trash' ? 'active' : ''}`}
+                onClick={() => handleTabChange('trash')}
+                title={`Recycle Bin (${trash.length})`}
+              >
+                <span className="site-icon">
+                  <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    <line x1="10" y1="11" x2="10" y2="17"></line>
+                    <line x1="14" y1="11" x2="14" y2="17"></line>
+                  </svg>
+                </span>
+                {trash.length > 0 && (
+                  <span className="site-badge-tiny trash-badge">{trash.length > 9 ? '9+' : trash.length}</span>
+                )}
+              </button>
+            </div>
           </div>
         )}
 
@@ -1576,29 +1981,76 @@ export default function ScribePanel({ onClose, onDockChange }) {
           {!isComposing && (
             <div className="mochi-scribe-main-header">
               <h3>
-                {activeTab === 'all' ? 'All Notes' :
+                {activeTab === 'trash' ? 'Recycle Bin' :
+                  activeTab === 'all' ? 'All Notes' :
                   activeTab === 'global' ? 'Global Scratchpad' :
-                    activeTab}
+                  activeTab}
               </h3>
-              {activeTab !== 'all' && (
-                <button className="mochi-scribe-add-small" onClick={() => setIsComposing(true)}>
+              {activeTab === 'trash' ? (
+                trash.length > 0 && (
+                  <button
+                    className="mochi-scribe-empty-trash-btn"
+                    onClick={handleEmptyTrash}
+                    title="Empty Recycle Bin"
+                  >
+                    <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3 6 5 6 21 6"></polyline>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                    Empty Trash
+                  </button>
+                )
+              ) : activeTab !== 'all' ? (
+                <button
+                  className="mochi-scribe-add-small"
+                  onClick={() => {
+                    setIsComposing(true);
+                    setNewNoteTitle('');
+                    setNewNoteContent('');
+                    initHistory('', '');
+                    setEditingNoteId(null);
+                    setSaveStatus('saved');
+                    try {
+                      sessionStorage.setItem('nick_scribe_composing_state', JSON.stringify({
+                        isComposing: true,
+                        editingNoteId: null,
+                        tab: activeTab,
+                        title: '',
+                        content: '',
+                        timestamp: Date.now()
+                      }));
+                    } catch {}
+                  }}
+                >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                   New
                 </button>
-              )}
+              ) : null}
             </div>
           )}
 
           <div className="mochi-scribe-scroll-area">
             {isComposing && activeTab !== 'all' ? (
               <div className="mochi-scribe-composer-block full-height">
-                <input
-                  className="mochi-scribe-title-input"
-                  value={newNoteTitle}
-                  onChange={(e) => setNewNoteTitle(e.target.value)}
-                  placeholder="Note Heading..."
-                  autoFocus
-                />
+                <div className="mochi-scribe-composer-header-row">
+                  <input
+                    className="mochi-scribe-title-input"
+                    value={newNoteTitle}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setNewNoteTitle(val);
+                      pushHistorySnapshot(val, newNoteContent, false);
+                    }}
+                    onKeyDown={handleTitleKeyDown}
+                    placeholder="Note Heading..."
+                    autoFocus
+                  />
+                  {(newNoteTitle.trim() || newNoteContent.trim()) && (
+                    <span className={`mochi-scribe-autosave-tag ${saveStatus}`}>
+                      {saveStatus === 'saving' ? 'Saving...' : '✓ Saved'}
+                    </span>
+                  )}
+                </div>
                 <div className="mochi-scribe-rich-toolbar">
                   <button className={activeFormats.bold ? 'active' : ''} onClick={() => handleFormat('bold')} title="Bold"><strong>B</strong></button>
                   <button className={activeFormats.italic ? 'active' : ''} onClick={() => handleFormat('italic')} title="Italic"><em>I</em></button>
@@ -1784,6 +2236,34 @@ export default function ScribePanel({ onClose, onDockChange }) {
 
                   <div className="toolbar-divider" />
 
+                  {/* Undo & Redo Options (After Table Option) */}
+                  <button
+                    type="button"
+                    className="toolbar-btn-icon"
+                    onClick={handleUndo}
+                    disabled={!canUndo}
+                    title="Undo (Ctrl+Z)"
+                  >
+                    <svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 7v6h6"></path>
+                      <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path>
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    className="toolbar-btn-icon"
+                    onClick={handleRedo}
+                    disabled={!canRedo}
+                    title="Redo (Ctrl+Y)"
+                  >
+                    <svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 7v6h-6"></path>
+                      <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13"></path>
+                    </svg>
+                  </button>
+
+                  <div className="toolbar-divider" />
+
                   <input type="file" ref={fileInputRef} style={{ display: 'none' }} accept="image/*,.txt,.md,.csv,.js,.jsx,.json" onChange={handleFileUpload} />
                   <button onClick={() => fileInputRef.current.click()} title="Add Attachment / Image" className="add-file-btn">
                     <svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
@@ -1794,7 +2274,11 @@ export default function ScribePanel({ onClose, onDockChange }) {
                   ref={editorRef}
                   contentEditable
                   suppressContentEditableWarning
-                  onInput={(e) => setNewNoteContent(e.currentTarget.innerHTML)}
+                  onInput={(e) => {
+                    const html = e.currentTarget.innerHTML;
+                    setNewNoteContent(html);
+                    pushHistorySnapshot(newNoteTitle, html, false);
+                  }}
                   onPaste={handlePaste}
                   onKeyUp={updateFormattingState}
                   onMouseUp={updateFormattingState}
@@ -1902,9 +2386,9 @@ export default function ScribePanel({ onClose, onDockChange }) {
                     </svg>
                   </button>
                   <div className="mochi-scribe-actions">
-                    <button className="mochi-scribe-btn secondary" onClick={cancelEdit}>Cancel</button>
+                    <button className="mochi-scribe-btn secondary" onClick={cancelEdit}>Back</button>
                     <button className="mochi-scribe-btn primary" onClick={handleAddNote}>
-                      {editingNoteId ? 'Update' : 'Save'}
+                      Done
                     </button>
                   </div>
                 </div>
@@ -1913,12 +2397,16 @@ export default function ScribePanel({ onClose, onDockChange }) {
               <div className="mochi-scribe-notes-grid">
                 {activeNotes.length === 0 ? (
                   <div className="mochi-scribe-empty-state">
-                    <div className="empty-icon">🍃</div>
-                    <p>No notes exist in this space yet.</p>
+                    <div className="empty-icon">{activeTab === 'trash' ? '🗑️' : '🍃'}</div>
+                    <p>{activeTab === 'trash' ? 'Recycle Bin is empty.' : 'No notes exist in this space yet.'}</p>
                   </div>
                 ) : (
                   activeNotes.map(note => (
-                    <div key={note.id} className="mochi-scribe-card-rich" onClick={() => handleEditNote(note, note.domain)}>
+                    <div
+                      key={note.id}
+                      className={`mochi-scribe-card-rich ${activeTab === 'trash' ? 'trash-card' : ''}`}
+                      onClick={() => activeTab !== 'trash' && handleEditNote(note, note.domain)}
+                    >
                       <div className="card-rich-header">
                         <h4 className="card-rich-title">
                           {note.title || (note.content ? note.content.replace(/<[^>]*>?/gm, '').substring(0, 30) + '...' : 'Untitled Note')}
@@ -1932,42 +2420,73 @@ export default function ScribePanel({ onClose, onDockChange }) {
                       <div className="card-rich-footer">
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <span className="card-rich-date">
-                            {new Date(note.timestamp).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            {activeTab === 'trash'
+                              ? `Deleted ${new Date(note.deletedAt || note.timestamp).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+                              : new Date(note.timestamp).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                           </span>
-                          {activeTab === 'all' && (
+                          {(activeTab === 'all' || activeTab === 'trash') && (
                             <>
                               <span style={{ color: '#D4C4B7' }}>•</span>
                               <span className="card-rich-domain">
-                                {note.domain === 'global' ? 'Global' : note.domain}
+                                {activeTab === 'trash'
+                                  ? (note.originalTab === 'global' ? 'Global' : note.originalTab)
+                                  : (note.domain === 'global' ? 'Global' : note.domain)}
                               </span>
                             </>
                           )}
                         </div>
                         <div className="card-rich-actions" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            className="card-rich-action-btn card-rich-download"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDownloadPdf(note);
-                            }}
-                            title="Download Note (PDF)"
-                          >
-                            <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                              <polyline points="7 10 12 15 17 10"></polyline>
-                              <line x1="12" y1="15" x2="12" y2="3"></line>
-                            </svg>
-                          </button>
-                          <button
-                            className="card-rich-action-btn card-rich-delete"
-                            onClick={(e) => handleDeleteNote(note.domain || activeTab, note.id, e)}
-                            title="Delete Note"
-                          >
-                            <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                              <polyline points="3 6 5 6 21 6"></polyline>
-                              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                            </svg>
-                          </button>
+                          {activeTab === 'trash' ? (
+                            <>
+                              <button
+                                className="card-rich-action-btn card-rich-restore"
+                                onClick={(e) => handleRestoreNote(note.id, e)}
+                                title="Restore Note"
+                              >
+                                <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="1 4 1 10 7 10"></polyline>
+                                  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+                                </svg>
+                              </button>
+                              <button
+                                className="card-rich-action-btn card-rich-delete-perm"
+                                onClick={(e) => handlePermanentDelete(note.id, e)}
+                                title="Delete Permanently"
+                              >
+                                <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                                </svg>
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                className="card-rich-action-btn card-rich-download"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDownloadPdf(note);
+                                }}
+                                title="Download Note (PDF)"
+                              >
+                                <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                  <polyline points="7 10 12 15 17 10"></polyline>
+                                  <line x1="12" y1="15" x2="12" y2="3"></line>
+                                </svg>
+                              </button>
+                              <button
+                                className="card-rich-action-btn card-rich-delete"
+                                onClick={(e) => handleDeleteNote(note.domain || activeTab, note.id, e)}
+                                title="Move to Recycle Bin"
+                              >
+                                <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="3 6 5 6 21 6"></polyline>
+                                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                </svg>
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>

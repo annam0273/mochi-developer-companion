@@ -214,6 +214,21 @@
     drop-shadow(4px 4px 0px rgba(0,0,0,0.15));
 }
 
+.mochi-companion-container.align-left .mochi-comic-cloud-wrapper {
+  right: auto;
+  left: 140px;
+}
+
+.mochi-companion-container.align-left .mochi-cloud-tail1 {
+  right: auto;
+  left: -10px;
+}
+
+.mochi-companion-container.align-left .mochi-cloud-tail2 {
+  right: auto;
+  left: -25px;
+}
+
 .mochi-comic-cloud-base {
   position: relative;
   background: white;

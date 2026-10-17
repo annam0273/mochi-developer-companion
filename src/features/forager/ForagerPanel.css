@@ -18,8 +18,20 @@
   animation: mochi-pop-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
+.mochi-companion-container.align-left .mochi-forager-panel,
+.mochi-forager-panel.align-left {
+  right: auto !important;
+  left: 170px !important;
+  animation: mochi-pop-in-left 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
+}
+
 @keyframes mochi-pop-in {
   0% { transform: scale(0.8) translateX(20px); opacity: 0; }
+  100% { transform: scale(1) translateX(0); opacity: 1; }
+}
+
+@keyframes mochi-pop-in-left {
+  0% { transform: scale(0.8) translateX(-20px); opacity: 0; }
   100% { transform: scale(1) translateX(0); opacity: 1; }
 }
 

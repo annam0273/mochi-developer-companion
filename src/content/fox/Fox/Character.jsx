@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback } from 'react';
 import './Character.css';
 import { useBlink, useSleep, useMouseTracking } from './character-animation';
+import { browserAPI } from '../../../core/browser';
 import FoxMenu from '../../../app/components/FoxMenu';
 import ForagerPanel from '../../../features/forager/ForagerPanel';
 import ScoutPanel from '../../../features/scout/ScoutPanel';
@@ -39,6 +40,10 @@ export default function Character({ movementState }) {
   const containerRef = useRef(null);
   const [isManualSleep, setIsManualSleep] = useState(() => {
     try {
+      const localVal = localStorage.getItem('nick_manual_sleep');
+      if (localVal !== null) {
+        return localVal === 'true';
+      }
       return sessionStorage.getItem('nick_manual_sleep') === 'true';
     } catch {
       return false;
@@ -69,24 +74,96 @@ export default function Character({ movementState }) {
   const stopListeningRef = useRef(null);
   const clearVoiceFeedbackRef = useRef(null);
 
-  const wakeUp = useCallback(() => {
+  const [activeFeature, setActiveFeature] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('nick_active_feature');
+      if (saved && saved !== 'null' && saved !== 'SKETCHER') {
+        return saved;
+      }
+    } catch {}
+    return null;
+  });
+  const [activeFeaturePayload, setActiveFeaturePayload] = useState(null);
+
+  const updateActiveFeature = useCallback((feature) => {
+    setActiveFeature(feature);
+    try {
+      if (feature && feature !== 'SKETCHER') {
+        sessionStorage.setItem('nick_active_feature', feature);
+      } else {
+        sessionStorage.removeItem('nick_active_feature');
+      }
+    } catch {}
+  }, []);
+
+  const [isScribeOpen, setIsScribeOpen] = useState(() => {
+    try {
+      const sessionVal = sessionStorage.getItem('nick_scribe_open');
+      if (sessionVal !== null) {
+        return sessionVal === 'true';
+      }
+      const localVal = localStorage.getItem('nick_scribe_open');
+      if (localVal !== null) {
+        return localVal === 'true';
+      }
+    } catch {}
+    return false;
+  });
+
+  const updateScribeOpen = useCallback((open) => {
+    setIsScribeOpen(open);
+    if (!open) {
+      setIsDocked(false);
+    }
+    try {
+      sessionStorage.setItem('nick_scribe_open', String(open));
+      localStorage.setItem('nick_scribe_open', String(open));
+    } catch {}
+    browserAPI.storage.local.set({ nick_scribe_open: open }).catch(() => {});
+  }, []);
+
+  React.useEffect(() => {
+    browserAPI.storage.local.get(['nick_scribe_open']).then((res) => {
+      if (res && typeof res.nick_scribe_open === 'boolean') {
+        setIsScribeOpen(res.nick_scribe_open);
+        try {
+          sessionStorage.setItem('nick_scribe_open', String(res.nick_scribe_open));
+          localStorage.setItem('nick_scribe_open', String(res.nick_scribe_open));
+        } catch {}
+      }
+    }).catch(() => {});
+  }, []);
+
+  const wakeUp = useCallback((persist = true) => {
     isManualSleepRef.current = false;
     isSleepingRef.current = false;
     setIsManualSleep(false);
     setIsSleeping(false);
-    try { sessionStorage.setItem('nick_manual_sleep', 'false'); } catch { }
+    if (persist) {
+      try {
+        localStorage.setItem('nick_manual_sleep', 'false');
+        sessionStorage.setItem('nick_manual_sleep', 'false');
+      } catch { }
+      browserAPI.storage.local.set({ nick_manual_sleep: false }).catch(() => {});
+    }
     setIsHappy(true);
     setWakeGreeting("I'm awake!");
     setTimeout(() => setIsHappy(false), 1200);
     setTimeout(() => setWakeGreeting(''), 2500);
   }, []);
 
-  const putToSleep = useCallback(() => {
+  const putToSleep = useCallback((persist = true) => {
     isManualSleepRef.current = true;
     isSleepingRef.current = true;
     setIsManualSleep(true);
     setIsSleeping(true);
-    try { sessionStorage.setItem('nick_manual_sleep', 'true'); } catch { }
+    if (persist) {
+      try {
+        localStorage.setItem('nick_manual_sleep', 'true');
+        sessionStorage.setItem('nick_manual_sleep', 'true');
+      } catch { }
+      browserAPI.storage.local.set({ nick_manual_sleep: true }).catch(() => {});
+    }
     if (clearVoiceFeedbackRef.current) {
       clearVoiceFeedbackRef.current();
     }
@@ -94,13 +171,13 @@ export default function Character({ movementState }) {
       stopListeningRef.current(true);
     }
     setIsMenuOpen(false);
-    setActiveFeature(null);
-    setIsScribeOpen(false);
+    updateActiveFeature(null);
+    updateScribeOpen(false);
     setWakeGreeting('');
     if (movementStateRef.current?.triggerTaskMode) {
       movementStateRef.current.triggerTaskMode();
     }
-  }, []);
+  }, [updateActiveFeature, updateScribeOpen]);
 
   const toggleSleep = useCallback(() => {
     const isCurrentlyAsleep = isManualSleepRef.current || isSleepingRef.current || isManualSleep || isSleeping;
@@ -110,6 +187,71 @@ export default function Character({ movementState }) {
       putToSleep();
     }
   }, [isManualSleep, isSleeping, wakeUp, putToSleep]);
+
+  // Global sleep synchronization across tabs & initial storage load
+  React.useEffect(() => {
+    let isMounted = true;
+
+    // 1. Initial load from extension storage
+    browserAPI.storage.local.get(['nick_manual_sleep']).then((res) => {
+      if (isMounted && res && typeof res.nick_manual_sleep === 'boolean') {
+        const shouldSleep = res.nick_manual_sleep;
+        setIsManualSleep(shouldSleep);
+        setIsSleeping(shouldSleep);
+        try {
+          localStorage.setItem('nick_manual_sleep', String(shouldSleep));
+        } catch {}
+      }
+    }).catch(() => {});
+
+    // 2. Listen to changes across all tabs via chrome.storage.local
+    const handleStorageChange = (changes, areaName) => {
+      if (changes && changes.nick_manual_sleep) {
+        const nextVal = Boolean(changes.nick_manual_sleep.newValue);
+        if (nextVal !== isManualSleepRef.current) {
+          if (nextVal) {
+            putToSleep(false);
+          } else {
+            wakeUp(false);
+          }
+        }
+      }
+    };
+    browserAPI.storage.local.onChanged.addListener(handleStorageChange);
+
+    // 3. Same-origin storage event listener
+    const handleWindowStorage = (e) => {
+      if (e.key === 'nick_manual_sleep') {
+        const nextVal = e.newValue === 'true';
+        if (nextVal !== isManualSleepRef.current) {
+          if (nextVal) {
+            putToSleep(false);
+          } else {
+            wakeUp(false);
+          }
+        }
+      }
+    };
+    window.addEventListener('storage', handleWindowStorage);
+
+    // 4. Background tab visibility change: stop voice and close open menus
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        if (stopListeningRef.current) {
+          stopListeningRef.current(true);
+        }
+        setIsMenuOpen(false);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      isMounted = false;
+      browserAPI.storage.local.onChanged.removeListener(handleStorageChange);
+      window.removeEventListener('storage', handleWindowStorage);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [wakeUp, putToSleep]);
 
   React.useEffect(() => {
     isSystemSleepingRef.current = isSystemSleeping;
@@ -145,9 +287,6 @@ export default function Character({ movementState }) {
   const [screenshotDataUrl, setScreenshotDataUrl] = useState(null);
 
 
-  const [activeFeature, setActiveFeature] = useState(null);
-  const [activeFeaturePayload, setActiveFeaturePayload] = useState(null);
-
   const [isWireframerActive, setIsWireframerActive] = useState(false);
   const [isXRayActive, setIsXRayActive] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
@@ -155,8 +294,6 @@ export default function Character({ movementState }) {
   React.useEffect(() => {
     document.designMode = isEditMode ? 'on' : 'off';
   }, [isEditMode]);
-
-  const [isScribeOpen, setIsScribeOpen] = useState(false);
 
   const [isDocked, setIsDocked] = useState(() => {
     try {
@@ -211,20 +348,20 @@ export default function Character({ movementState }) {
     setActiveFeaturePayload(payload);
 
     if (action === 'FORAGER') {
-      setActiveFeature('FORAGER');
+      updateActiveFeature('FORAGER');
     } else if (action === 'SCOUT') {
-      setActiveFeature('SCOUT');
+      updateActiveFeature('SCOUT');
     } else if (action === 'TYPOGRAPHER') {
-      setActiveFeature('TYPOGRAPHER');
+      updateActiveFeature('TYPOGRAPHER');
     } else if (action === 'COMPRESSOR') {
-      setActiveFeature('COMPRESSOR');
+      updateActiveFeature('COMPRESSOR');
     } else if (action === 'SCRIBE') {
-      setIsScribeOpen(true);
+      updateScribeOpen(true);
     } else if (action === 'SKETCHER') {
       setIsTakingScreenshot(true);
     } else if (action === 'CLOSE') {
-      setActiveFeature(null);
-      setIsScribeOpen(false);
+      updateActiveFeature(null);
+      updateScribeOpen(false);
       setIsMenuOpen(false);
     } else if (action === 'TOGGLE_SLEEP') {
       toggleSleep();
@@ -393,6 +530,30 @@ export default function Character({ movementState }) {
 
   const pupilOffset = useMouseTracking(containerRef, isSleeping, facingRight, rotation);
 
+  const getMenuAlign = useCallback(() => {
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      if (rect.left < 360) return 'left';
+      if (window.innerWidth - rect.right < 360) return 'right';
+      return rect.left < window.innerWidth / 2 ? 'left' : 'right';
+    }
+    const currentX = movementState?.cornerPos?.x || 0;
+    return (window.innerWidth + currentX) < (window.innerWidth / 2) ? 'left' : 'right';
+  }, [movementState?.cornerPos?.x]);
+
+  const prevCornerPosRef = useRef(movementState?.cornerPos);
+  React.useEffect(() => {
+    if (
+      isDragging &&
+      prevCornerPosRef.current &&
+      (prevCornerPosRef.current.x !== movementState?.cornerPos?.x ||
+       prevCornerPosRef.current.y !== movementState?.cornerPos?.y)
+    ) {
+      setIsMenuOpen(false);
+    }
+    prevCornerPosRef.current = movementState?.cornerPos;
+  }, [isDragging, movementState?.cornerPos]);
+
   // --- FOX IDLE PEEKING LOGIC ---
   const foxIdleTimerRef = useRef(null);
 
@@ -433,20 +594,28 @@ export default function Character({ movementState }) {
   React.useEffect(() => {
     const handleGlobalClick = (e) => {
       // Ignore clicks that happen inside our portals
-      if (e.target.closest('.mochi-sketcher-overlay')) {
+      if (
+        e.target.closest('.mochi-sketcher-overlay') ||
+        e.target.closest('.mochi-scribe-panel') ||
+        e.target.closest('.mochi-scout-panel') ||
+        e.target.closest('.mochi-forager-panel') ||
+        e.target.closest('.mochi-typographer-panel') ||
+        e.target.closest('.mochi-compressor-panel') ||
+        e.target.closest('.mochi-fox-menu')
+      ) {
         return;
       }
 
       // If clicking outside the companion container, close active panels
       if (containerRef.current && !containerRef.current.contains(e.target)) {
         setIsMenuOpen(false);
-        setActiveFeature(null);
+        updateActiveFeature(null);
       }
     };
 
     window.addEventListener('pointerdown', handleGlobalClick);
     return () => window.removeEventListener('pointerdown', handleGlobalClick);
-  }, []);
+  }, [updateActiveFeature]);
 
   const handleClick = (e) => {
     e?.stopPropagation?.();
@@ -464,7 +633,7 @@ export default function Character({ movementState }) {
     }
 
     if (activeFeature) {
-      setActiveFeature(null);
+      updateActiveFeature(null);
     } else {
       setIsMenuOpen(prev => !prev);
     }
@@ -538,7 +707,7 @@ export default function Character({ movementState }) {
 
   return (
     <div
-      className={`mochi-companion-container ${isManualSleep ? 'mochi-asleep' : ''} ${mode === 'peeking' ? 'mochi-peeking' : ''} ${isDocked ? 'mochi-docked-hidden' : ''}`}
+      className={`mochi-companion-container ${isManualSleep ? 'mochi-asleep' : ''} ${mode === 'peeking' ? 'mochi-peeking' : ''} ${isDocked ? 'mochi-docked-hidden' : ''} ${getMenuAlign() === 'left' ? 'align-left' : ''}`}
       ref={containerRef}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -608,18 +777,19 @@ export default function Character({ movementState }) {
 
       {isMenuOpen && !activeFeature && (
         <FoxMenu
+          align={getMenuAlign()}
           onClose={(e) => { e?.stopPropagation(); setIsMenuOpen(false); }}
           onAction={handleMenuAction}
         />
       )}
 
       {activeFeature === 'FORAGER' && (
-        <ForagerPanel initialTab={activeFeaturePayload} onClose={(e) => { e?.stopPropagation(); setActiveFeature(null); }} />
+        <ForagerPanel initialTab={activeFeaturePayload} onClose={(e) => { e?.stopPropagation(); updateActiveFeature(null); }} />
       )}
 
       {activeFeature === 'SCOUT' && (
         <ScoutPanel
-          onClose={(e) => { e?.stopPropagation(); setActiveFeature(null); setIsDocked(false); }}
+          onClose={(e) => { e?.stopPropagation(); updateActiveFeature(null); setIsDocked(false); }}
           onDockChange={setIsDocked}
         />
       )}
@@ -627,7 +797,7 @@ export default function Character({ movementState }) {
       {activeFeature === 'TYPOGRAPHER' && (
         <TypographerPanel
           initialTab={activeFeaturePayload}
-          onClose={(e) => { e?.stopPropagation(); setActiveFeature(null); }}
+          onClose={(e) => { e?.stopPropagation(); updateActiveFeature(null); }}
           isWireframerActive={isWireframerActive}
           setIsWireframerActive={setIsWireframerActive}
           isXRayActive={isXRayActive}
@@ -638,12 +808,12 @@ export default function Character({ movementState }) {
       )}
 
       {(activeFeature === 'COMPRESSOR' || activeFeature === 'compressor') && (
-        <CompressorPanel onClose={(e) => { e?.stopPropagation(); setActiveFeature(null); }} />
+        <CompressorPanel onClose={(e) => { e?.stopPropagation(); updateActiveFeature(null); }} />
       )}
 
       {isScribeOpen && (
         <ScribePanel
-          onClose={() => { setIsScribeOpen(false); setIsDocked(false); }}
+          onClose={() => updateScribeOpen(false)}
           onDockChange={setIsDocked}
         />
       )}
@@ -651,7 +821,7 @@ export default function Character({ movementState }) {
       {activeFeature === 'SKETCHER' && screenshotDataUrl && (
         <SketcherPanel
           imageUrl={screenshotDataUrl}
-          onClose={(e) => { e?.stopPropagation(); setActiveFeature(null); setScreenshotDataUrl(null); }}
+          onClose={(e) => { e?.stopPropagation(); updateActiveFeature(null); setScreenshotDataUrl(null); }}
         />
       )}
 
