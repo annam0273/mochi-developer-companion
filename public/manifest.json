@@ -3,7 +3,7 @@
   "name": "Nick - The developer companion",
   "version": "1.0",
   "description": "A fully autonomous 2D SVG character companion for web developers.",
-  "permissions": ["contextMenus", "storage", "offscreen", "activeTab"],
+  "permissions": ["contextMenus", "storage", "unlimitedStorage", "offscreen", "activeTab"],
   "host_permissions": [
     "<all_urls>"
   ],

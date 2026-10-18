@@ -1172,7 +1172,7 @@ p.scribe-after-table:empty::before {
   outline: none !important;
   cursor: text !important;
   display: inline-block !important;
-  min-width: 45px !important;
+  min-width: 70px !important;
   max-width: 220px !important;
   white-space: nowrap !important;
   overflow: hidden !important;
@@ -1205,9 +1205,7 @@ p.scribe-after-table:empty::before {
 }
 
 .tbl-info {
-  font-size: 10px !important;
-  font-weight: 800 !important;
-  color: #8C7A6B !important;
+  display: none !important;
 }
 
 /* Table Controls Sub-row (below the table name section) */

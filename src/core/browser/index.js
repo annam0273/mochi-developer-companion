@@ -16,40 +16,52 @@ export const browserAPI = {
     local: {
       get: (keys) => {
         return new Promise((resolve, reject) => {
-          if (!_globalBrowser) { resolve({}); return; }
-          _globalBrowser.storage.local.get(keys, (result) => {
-            if (_globalBrowser.runtime.lastError) reject(_globalBrowser.runtime.lastError);
-            else resolve(result || {});
-          });
+          if (!_globalBrowser?.storage?.local) { resolve({}); return; }
+          try {
+            _globalBrowser.storage.local.get(keys, (result) => {
+              if (_globalBrowser?.runtime?.lastError) reject(_globalBrowser.runtime.lastError);
+              else resolve(result || {});
+            });
+          } catch (e) {
+            reject(e);
+          }
         });
       },
       set: (items) => {
         return new Promise((resolve, reject) => {
-          if (!_globalBrowser) { resolve(); return; }
-          _globalBrowser.storage.local.set(items, () => {
-            if (_globalBrowser.runtime.lastError) reject(_globalBrowser.runtime.lastError);
-            else resolve();
-          });
+          if (!_globalBrowser?.storage?.local) { resolve(); return; }
+          try {
+            _globalBrowser.storage.local.set(items, () => {
+              if (_globalBrowser?.runtime?.lastError) reject(_globalBrowser.runtime.lastError);
+              else resolve();
+            });
+          } catch (e) {
+            reject(e);
+          }
         });
       },
       remove: (keys) => {
         return new Promise((resolve, reject) => {
-          if (!_globalBrowser) { resolve(); return; }
-          _globalBrowser.storage.local.remove(keys, () => {
-            if (_globalBrowser.runtime.lastError) reject(_globalBrowser.runtime.lastError);
-            else resolve();
-          });
+          if (!_globalBrowser?.storage?.local) { resolve(); return; }
+          try {
+            _globalBrowser.storage.local.remove(keys, () => {
+              if (_globalBrowser?.runtime?.lastError) reject(_globalBrowser.runtime.lastError);
+              else resolve();
+            });
+          } catch (e) {
+            reject(e);
+          }
         });
       },
       // Keep support for onChange listeners
       onChanged: {
         addListener: (callback) => {
-          if (_globalBrowser && _globalBrowser.storage) {
+          if (_globalBrowser?.storage?.onChanged) {
             _globalBrowser.storage.onChanged.addListener(callback);
           }
         },
         removeListener: (callback) => {
-          if (_globalBrowser && _globalBrowser.storage) {
+          if (_globalBrowser?.storage?.onChanged) {
             _globalBrowser.storage.onChanged.removeListener(callback);
           }
         }

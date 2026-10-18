@@ -11,10 +11,11 @@ import XRayTooltip from '../../../features/typographer/XRayTooltip';
 import ScribePanel from '../../../features/scribe/ScribePanel';
 import SketcherPanel from '../../../features/sketcher/SketcherPanel';
 import { useVoiceCommand } from '../../../features/voice/useVoiceCommand';
+import VoiceGuideCard from '../../../features/voice/VoiceGuideCard';
 import { useCompanionship } from './useCompanionship';
 import { usePageTheme } from './usePageTheme';
 
-const SpeechCloud = ({ className = '', onClick, children }) => (
+const SpeechCloud = ({ className = '', onClick, actionButton, children }) => (
   <div className={`mochi-comic-cloud-wrapper ${className}`} onClick={onClick}>
     <div className="mochi-comic-cloud-base">
       <div className="mochi-cloud-bump bump1" />
@@ -29,11 +30,52 @@ const SpeechCloud = ({ className = '', onClick, children }) => (
       <div className="mochi-cloud-bump bump10" />
       <div className="mochi-cloud-bump bump11" />
       <div className="mochi-cloud-bump bump12" />
+      {actionButton && <div className="mochi-cloud-corner-action">{actionButton}</div>}
       <div className="mochi-speech-content">{children}</div>
     </div>
     <div className="mochi-cloud-tail1" />
     <div className="mochi-cloud-tail2" />
   </div>
+);
+
+const IconVoiceMic = ({ size = 15, className = '' }) => (
+  <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
+    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+    <line x1="12" y1="19" x2="12" y2="22"/>
+    <line x1="8" y1="22" x2="16" y2="22"/>
+  </svg>
+);
+
+const IconMiniSpinner = ({ size = 14 }) => (
+  <svg className="mochi-spin-icon" viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+  </svg>
+);
+
+const IconQuestionTag = ({ size = 13 }) => (
+  <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10"/>
+    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+    <line x1="12" y1="17" x2="12.01" y2="17"/>
+  </svg>
+);
+
+const IconBookMark = ({ size = 13 }) => (
+  <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+    <line x1="8" y1="7" x2="16" y2="7"/>
+    <line x1="8" y1="11" x2="13" y2="11"/>
+  </svg>
+);
+
+const IconInfo = ({ size = 12 }) => (
+  <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10"/>
+    <line x1="12" y1="16" x2="12" y2="12"/>
+    <line x1="12" y1="8" x2="12.01" y2="8"/>
+  </svg>
 );
 
 export default function Character({ movementState }) {
@@ -280,9 +322,17 @@ export default function Character({ movementState }) {
     };
   }, [isSystemSleeping, isManualSleep]);
   const { companionMessage, companionMood } = useCompanionship();
+
+  React.useEffect(() => {
+    if (companionMessage && !isManualSleep) {
+      setIsSleeping(false);
+    }
+  }, [companionMessage, isManualSleep]);
+
   const [isHovered, setIsHovered] = useState(false);
   const [isHappy, setIsHappy] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isVoiceGuideOpen, setIsVoiceGuideOpen] = useState(false);
   const [isTakingScreenshot, setIsTakingScreenshot] = useState(false);
   const [screenshotDataUrl, setScreenshotDataUrl] = useState(null);
 
@@ -348,44 +398,86 @@ export default function Character({ movementState }) {
     setActiveFeaturePayload(payload);
 
     if (action === 'FORAGER') {
+      setIsVoiceGuideOpen(false);
       updateActiveFeature('FORAGER');
     } else if (action === 'SCOUT') {
+      setIsVoiceGuideOpen(false);
       updateActiveFeature('SCOUT');
     } else if (action === 'TYPOGRAPHER') {
+      setIsVoiceGuideOpen(false);
       updateActiveFeature('TYPOGRAPHER');
     } else if (action === 'COMPRESSOR') {
+      setIsVoiceGuideOpen(false);
       updateActiveFeature('COMPRESSOR');
     } else if (action === 'SCRIBE') {
+      setIsVoiceGuideOpen(false);
       updateScribeOpen(true);
     } else if (action === 'SKETCHER') {
+      setIsVoiceGuideOpen(false);
       setIsTakingScreenshot(true);
     } else if (action === 'CLOSE') {
       updateActiveFeature(null);
       updateScribeOpen(false);
       setIsMenuOpen(false);
+      setIsVoiceGuideOpen(false);
     } else if (action === 'TOGGLE_SLEEP') {
       toggleSleep();
+    } else if (action === 'COME_HERE') {
+      if (movementStateRef.current.mode === 'peeking') {
+        movementStateRef.current.triggerTaskMode();
+      }
+    } else if (action === 'VOICE') {
+      setIsVoiceGuideOpen(false);
+      triggerVoice();
+    } else if (action === 'GUIDE' || action === 'HELP') {
+      stopListeningRef.current?.(true);
+      clearVoiceFeedbackRef.current?.();
+      setIsVoiceGuideOpen((prev) => !prev);
+      setIsMenuOpen(false);
     }
   };
 
-  const { isListening, transcript, error, voiceFeedback, startListening, stopListening, clearVoiceFeedback } = useVoiceCommand(handleMenuAction);
+  const {
+    isListening,
+    isMicReady,
+    transcript,
+    error,
+    voiceFeedback,
+    triggerVoice,
+    startListening,
+    stopListening,
+    clearVoiceFeedback,
+    showPermissionCard,
+    permissionStep,
+    requestMicPermission,
+    dismissPermissionCard
+  } = useVoiceCommand(handleMenuAction);
   const isListeningRef = useRef(isListening);
+  const keyDownTimeRef = useRef(0);
 
   isListeningRef.current = isListening;
   stopListeningRef.current = stopListening;
   clearVoiceFeedbackRef.current = clearVoiceFeedback;
 
+  // Whenever guide opens, ensure voice feature is completely turned off
+  React.useEffect(() => {
+    if (isVoiceGuideOpen) {
+      stopListening(true);
+      clearVoiceFeedback();
+    }
+  }, [isVoiceGuideOpen, stopListening, clearVoiceFeedback]);
+
   React.useEffect(() => {
     if (isListening) {
+      // Wake Nick up completely (clears both manual and system sleep states)
+      wakeUp(false);
       // If peeking, return to comfortable position immediately
-      if (movementStateRef.current.mode === 'peeking') {
+      if (movementStateRef.current?.triggerTaskMode) {
         movementStateRef.current.triggerTaskMode();
       }
-      // Wake up
-      setIsSleeping(false);
       if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
     }
-  }, [isListening]);
+  }, [isListening, wakeUp]);
 
   React.useEffect(() => {
     const handleKeyDown = (e) => {
@@ -400,23 +492,19 @@ export default function Character({ movementState }) {
         return;
       }
 
-      // When character is sleeping, NO OTHER SHORTCUTS should work!
+      // When character is sleeping, companion action shortcuts (Alt+V, Alt+C, Alt+B) are disabled
       if (isCurrentlyAsleep) {
-        if (e.altKey || (e.code === 'KeyV' || e.key === 'v') || (e.code === 'KeyB' || e.key === 'b') || (e.code === 'KeyC' || e.key === 'c')) {
-          e.preventDefault();
-          e.stopPropagation();
-        }
         return;
       }
 
+      // Voice command shortcut (Alt + V) - supports tap to toggle or hold to talk
       if (e.altKey && (e.code === 'KeyV' || e.key === 'v')) {
         e.preventDefault();
         e.stopPropagation();
         if (e.repeat) return;
 
-        if (!isListeningRef.current) {
-          startListening();
-        }
+        keyDownTimeRef.current = Date.now();
+        triggerVoice();
       }
 
       // Shortcut to call character back to comfortable place / den (Alt + C or Alt + B)
@@ -433,17 +521,16 @@ export default function Character({ movementState }) {
     const handleKeyUp = (e) => {
       const isCurrentlyAsleep = isManualSleepRef.current || isSleepingRef.current || isManualSleep || isSleeping;
       if (isCurrentlyAsleep) {
-        if (e.code === 'KeyV' || e.key === 'v' || e.altKey) {
-          e.preventDefault();
-          e.stopPropagation();
-        }
         return;
       }
 
       if (e.code === 'KeyV' || e.key === 'v') {
-        if (isListeningRef.current) {
+        const pressDuration = Date.now() - (keyDownTimeRef.current || 0);
+        // If user was actively holding Alt+V for push-to-talk (> 450ms), stop listening on release
+        if (isListeningRef.current && pressDuration >= 450) {
           stopListening();
         }
+        // If it was a quick tap (< 450ms), we keep listening until a command or silence timeout occurs
       }
     };
 
@@ -601,7 +688,8 @@ export default function Character({ movementState }) {
         e.target.closest('.mochi-forager-panel') ||
         e.target.closest('.mochi-typographer-panel') ||
         e.target.closest('.mochi-compressor-panel') ||
-        e.target.closest('.mochi-fox-menu')
+        e.target.closest('.mochi-fox-menu') ||
+        e.target.closest('.mochi-voice-guide-wrapper')
       ) {
         return;
       }
@@ -609,6 +697,7 @@ export default function Character({ movementState }) {
       // If clicking outside the companion container, close active panels
       if (containerRef.current && !containerRef.current.contains(e.target)) {
         setIsMenuOpen(false);
+        setIsVoiceGuideOpen(false);
         updateActiveFeature(null);
       }
     };
@@ -635,6 +724,7 @@ export default function Character({ movementState }) {
     if (activeFeature) {
       updateActiveFeature(null);
     } else {
+      setIsVoiceGuideOpen(false);
       setIsMenuOpen(prev => !prev);
     }
   };
@@ -723,7 +813,7 @@ export default function Character({ movementState }) {
         ...(isDocked ? { width: 0, height: 0, margin: 0, padding: 0 } : {})
       }}
     >
-      {isManualSleep && !isDocked && (
+      {isManualSleep && !isDocked && !isListening && (
         <div
           className="mochi-snore-widget"
           onPointerDown={(e) => e.stopPropagation()}
@@ -751,7 +841,7 @@ export default function Character({ movementState }) {
       {!isDocked && voiceFeedback && !isManualSleep && !isSleeping && !isListening && !error && !wakeGreeting && !isCloudSuppressed && mode !== 'peeking' && <SpeechCloud className="mochi-companion-bubble">{voiceFeedback}</SpeechCloud>}
       {!isDocked && companionMessage && !isListening && !error && !voiceFeedback && !wakeGreeting && !isManualSleep && !isCloudSuppressed && mode !== 'peeking' && <SpeechCloud className="mochi-companion-bubble">{companionMessage}</SpeechCloud>}
       {!isDocked && isHappy && !companionMessage && !isListening && !error && !voiceFeedback && !wakeGreeting && !isManualSleep && !isCloudSuppressed && mode !== 'peeking' && <SpeechCloud>Hi!</SpeechCloud>}
-      {!isDocked && isSleeping && !isManualSleep && !isListening && mode !== 'peeking' && (
+      {!isDocked && isSleeping && !isManualSleep && !isListening && !companionMessage && mode !== 'peeking' && (
         <div
           className="mochi-snore-widget mochi-idle-snore"
           onPointerDown={(e) => e.stopPropagation()}
@@ -768,11 +858,133 @@ export default function Character({ movementState }) {
           </div>
         </div>
       )}
-      {!isDocked && error && !isCloudSuppressed && mode !== 'peeking' && <SpeechCloud className="mochi-error-bubble">{error}</SpeechCloud>}
-      {!isDocked && isListening && !isCloudSuppressed && mode !== 'peeking' && (
-        <SpeechCloud className="mochi-listening-bubble" onClick={(e) => { e.stopPropagation(); stopListening(); }}>
-          {transcript || "Tell me what to do..."}
+      {!isDocked && error && !isListening && (
+        <SpeechCloud className="mochi-error-bubble">{error}</SpeechCloud>
+      )}
+      {!isDocked && isListening && (
+        <SpeechCloud
+          className="mochi-listening-bubble"
+          onClick={(e) => { e.stopPropagation(); stopListening(); }}
+          actionButton={
+            <button
+              type="button"
+              className="mochi-bubble-corner-btn"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                stopListening(true);
+                clearVoiceFeedback();
+                setIsVoiceGuideOpen(true);
+              }}
+              title="Command guide"
+            >
+              <IconBookMark size={13} />
+            </button>
+          }
+        >
+          <span className="mochi-listening-row">
+            {!isMicReady ? (
+              <>
+                <IconMiniSpinner size={15} />
+                <span>Tuning in...</span>
+              </>
+            ) : transcript ? (
+              <>
+                <IconVoiceMic size={15} />
+                <span>"{transcript}"</span>
+              </>
+            ) : (
+              <>
+                <IconVoiceMic size={15} className="mochi-pulse-mic" />
+                <span>I'm listening!</span>
+              </>
+            )}
+          </span>
         </SpeechCloud>
+      )}
+
+      {!isDocked && showPermissionCard && (
+        <div
+          className={`mochi-mic-permission-card ${getMenuAlign() === 'left' ? 'align-left' : ''}`}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="mochi-perm-close-btn"
+            onClick={dismissPermissionCard}
+            title="Close"
+          >
+            ✕
+          </button>
+          <div className="mochi-perm-header">
+            <span className="mochi-perm-icon"><IconVoiceMic size={16} /></span>
+            <span className="mochi-perm-title">Voice Commands</span>
+          </div>
+
+          {permissionStep === 'requesting' ? (
+            <div className="mochi-perm-body">
+              <p className="mochi-perm-desc">
+                Click <strong>"Allow"</strong> in your browser address bar above!
+              </p>
+              <div className="mochi-perm-waiting">
+                <IconMiniSpinner size={14} /> <span>Waiting for permission...</span>
+              </div>
+            </div>
+          ) : permissionStep === 'denied' ? (
+            <div className="mochi-perm-body">
+              <p className="mochi-perm-desc mochi-perm-denied">
+                Microphone is blocked on this site.
+              </p>
+              <p className="mochi-perm-subtext">
+                Click the <strong>tune/lock icon</strong> in your browser address bar to turn on microphone access.
+              </p>
+              <button
+                type="button"
+                className="mochi-perm-action-btn"
+                onClick={dismissPermissionCard}
+              >
+                Got it
+              </button>
+              <button
+                type="button"
+                className="mochi-perm-guide-link-btn"
+                onClick={() => {
+                  dismissPermissionCard();
+                  setIsVoiceGuideOpen(true);
+                }}
+              >
+                <IconBookMark size={13} />
+                <span>View shortcuts & commands</span>
+              </button>
+            </div>
+          ) : (
+            <div className="mochi-perm-body">
+              <p className="mochi-perm-desc">
+                Nick needs microphone access on this website to hear your voice commands.
+              </p>
+              <button
+                type="button"
+                className="mochi-perm-action-btn"
+                onClick={requestMicPermission}
+              >
+                <IconVoiceMic size={14} />
+                <span>Allow Microphone</span>
+              </button>
+              <button
+                type="button"
+                className="mochi-perm-guide-link-btn"
+                onClick={() => {
+                  dismissPermissionCard();
+                  setIsVoiceGuideOpen(true);
+                }}
+              >
+                <IconBookMark size={13} />
+                <span>View shortcuts & commands</span>
+              </button>
+            </div>
+          )}
+        </div>
       )}
 
       {isMenuOpen && !activeFeature && (
@@ -780,6 +992,17 @@ export default function Character({ movementState }) {
           align={getMenuAlign()}
           onClose={(e) => { e?.stopPropagation(); setIsMenuOpen(false); }}
           onAction={handleMenuAction}
+        />
+      )}
+
+      {isVoiceGuideOpen && !activeFeature && (
+        <VoiceGuideCard
+          align={getMenuAlign()}
+          onClose={() => setIsVoiceGuideOpen(false)}
+          onAction={(act, payload) => {
+            setIsVoiceGuideOpen(false);
+            handleMenuAction(act, payload);
+          }}
         />
       )}
 

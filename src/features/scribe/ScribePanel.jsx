@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { getNotebooks, saveNotebooks, getTrash, saveTrash } from '../../core/storage/scribe';
+import { browserAPI } from '../../core/browser';
 import './ScribePanel.css';
 
 const HIGHLIGHT_COLORS = [
@@ -21,10 +22,75 @@ const TEXT_COLORS = [
   { name: 'Royal Purple', color: '#6741D9' },
 ];
 
+function getCleanNotePreview(htmlContent) {
+  if (!htmlContent || typeof htmlContent !== 'string') return '';
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmlContent, 'text/html');
+
+    // Process tables: format as Table: <table name>
+    doc.querySelectorAll('.scribe-table-wrap').forEach(tableWrap => {
+      const titleEl = tableWrap.querySelector('.tbl-title-editable');
+      const rawTitle = titleEl?.textContent?.trim();
+      const tableName = rawTitle && rawTitle.toLowerCase() !== 'type table title...' ? rawTitle : 'Table Name';
+      const summary = `Table: ${tableName}`;
+
+      const replacement = doc.createElement('span');
+      replacement.textContent = summary + ' ';
+      tableWrap.replaceWith(replacement);
+    });
+
+    // Also catch any orphan table elements not wrapped in scribe-table-wrap
+    doc.querySelectorAll('table').forEach(tbl => {
+      const replacement = doc.createElement('span');
+      replacement.textContent = 'Table ';
+      tbl.replaceWith(replacement);
+    });
+
+    // Remove any leftover controls or toolbar buttons if any
+    doc.querySelectorAll(
+      '.table-scroll-bar-top, .table-header-controls-row, .table-scroll-buttons, .col-resizer, .tbl-del-btn, .tbl-pan-btn, .tbl-action-pill-btn'
+    ).forEach(el => el.remove());
+
+    // Process images
+    doc.querySelectorAll('img').forEach(img => {
+      const alt = img.getAttribute('alt') || '';
+      const replacement = doc.createElement('span');
+      replacement.textContent = alt ? ` 📷 [${alt}] ` : ' 📷 [Image] ';
+      img.replaceWith(replacement);
+    });
+
+    // Process task checklist items
+    doc.querySelectorAll('.scribe-task-item').forEach(task => {
+      const checkbox = task.querySelector('input[type="checkbox"]');
+      const isChecked = checkbox?.checked || task.classList.contains('completed');
+      const text = task.querySelector('.task-text')?.textContent?.trim() || '';
+      const replacement = doc.createElement('span');
+      replacement.textContent = `${isChecked ? '☑' : '☐'} ${text} `;
+      task.replaceWith(replacement);
+    });
+
+    const text = (doc.body.textContent || '')
+      .replace(/\u00a0/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    return text.substring(0, 95);
+  } catch {
+    return htmlContent
+      .replace(/<button[^>]*>.*?<\/button>/gi, '')
+      .replace(/<div class="[^"]*controls[^"]*"[^>]*>.*?<\/div>/gi, '')
+      .replace(/<[^>]*>?/gm, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .substring(0, 80);
+  }
+}
+
 export default function ScribePanel({ onClose, onDockChange }) {
   const savedCompose = (() => {
     try {
-      const str = sessionStorage.getItem('nick_scribe_composing_state');
+      const str = sessionStorage.getItem('nick_scribe_composing_state') || localStorage.getItem('nick_scribe_composing_state');
       if (str) {
         const parsed = JSON.parse(str);
         if (parsed && parsed.isComposing) return parsed;
@@ -35,12 +101,25 @@ export default function ScribePanel({ onClose, onDockChange }) {
 
   const [notebooks, setNotebooks] = useState({ global: [] });
   const [trash, setTrash] = useState([]);
-  const [activeTab, setActiveTab] = useState(() => savedCompose?.tab || window.location.hostname || 'global');
+  const [activeTab, setActiveTab] = useState(() => {
+    if (savedCompose?.tab) return savedCompose.tab;
+    try {
+      const lastTab = localStorage.getItem('nick_scribe_active_tab');
+      if (lastTab) return lastTab;
+    } catch {}
+    return window.location.hostname || 'global';
+  });
   const [newNoteTitle, setNewNoteTitle] = useState(() => savedCompose?.title || '');
   const [newNoteContent, setNewNoteContent] = useState(() => savedCompose?.content || '');
   const [editingNoteId, setEditingNoteId] = useState(() => savedCompose?.editingNoteId || null);
   const [isComposing, setIsComposing] = useState(() => Boolean(savedCompose?.isComposing));
   const [saveStatus, setSaveStatus] = useState('saved'); // 'saved' | 'saving'
+
+  const isNotebooksLoadedRef = useRef(false);
+  const isTrashLoadedRef = useRef(false);
+  const notebooksRef = useRef(notebooks);
+  notebooksRef.current = notebooks;
+
   const autoSaveTimerRef = useRef(null);
   const isComposingRef = useRef(isComposing);
   isComposingRef.current = isComposing;
@@ -180,15 +259,57 @@ export default function ScribePanel({ onClose, onDockChange }) {
 
   // Load persistent Recycle Bin
   useEffect(() => {
+    let isMounted = true;
     getTrash().then(trashItems => {
+      if (!isMounted) return;
       setTrash(Array.isArray(trashItems) ? trashItems : []);
+      isTrashLoadedRef.current = true;
     });
+    return () => { isMounted = false; };
   }, []);
 
-  // Save persistent Recycle Bin on change
+  // Save persistent Recycle Bin on change ONLY after initial load
   useEffect(() => {
+    if (!isTrashLoadedRef.current) return;
     saveTrash(trash);
   }, [trash]);
+
+  // Sync notebook and trash changes across browser tabs in real-time
+  useEffect(() => {
+    const handleStorageChange = (changes, area) => {
+      if (area !== 'local') return;
+      if (changes.mochi_scribe_notebooks && changes.mochi_scribe_notebooks.newValue) {
+        const remoteNotebooks = changes.mochi_scribe_notebooks.newValue;
+        if (typeof remoteNotebooks === 'object') {
+          if (!isComposingRef.current) {
+            notebooksRef.current = remoteNotebooks;
+            setNotebooks(remoteNotebooks);
+          } else {
+            // Keep working copy of current tab note while composing
+            setNotebooks(prev => {
+              const currentActive = prev[activeTabRef.current];
+              const merged = {
+                ...remoteNotebooks,
+                [activeTabRef.current]: currentActive || remoteNotebooks[activeTabRef.current] || []
+              };
+              notebooksRef.current = merged;
+              return merged;
+            });
+          }
+        }
+      }
+      if (changes.mochi_scribe_trash && Array.isArray(changes.mochi_scribe_trash.newValue)) {
+        setTrash(changes.mochi_scribe_trash.newValue);
+      }
+    };
+
+    if (browserAPI.storage?.local?.onChanged) {
+      browserAPI.storage.local.onChanged.addListener(handleStorageChange);
+      return () => {
+        browserAPI.storage.local.onChanged.removeListener(handleStorageChange);
+      };
+    }
+  }, []);
 
   useEffect(() => {
     const handleOutsideClick = (e) => {
@@ -322,7 +443,10 @@ export default function ScribePanel({ onClose, onDockChange }) {
 
   // Load saved content and position
   useEffect(() => {
+    let isMounted = true;
     getNotebooks().then(data => {
+      if (!isMounted) return;
+
       // Migrate old string data to array if necessary
       const loaded = {};
       for (const key in data) {
@@ -332,8 +456,10 @@ export default function ScribePanel({ onClose, onDockChange }) {
           } else {
             loaded[key] = [];
           }
+        } else if (Array.isArray(data[key])) {
+          loaded[key] = data[key];
         } else {
-          loaded[key] = data[key] || [];
+          loaded[key] = [];
         }
       }
 
@@ -368,41 +494,96 @@ export default function ScribePanel({ onClose, onDockChange }) {
         loaded[targetTab] = tabList;
       }
 
+      notebooksRef.current = loaded;
       setNotebooks(loaded);
+      isNotebooksLoadedRef.current = true;
 
-      // Auto-switch to current domain ONLY if not actively composing
-      if (!savedCompose?.isComposing && currentDomain) {
-        setActiveTab(currentDomain);
-        setNewNoteTitle('');
-        setNewNoteContent('');
-        setEditingNoteId(null);
-        setIsComposing(false);
-        if (!loaded[currentDomain]) {
-          setNotebooks(prev => ({ ...prev, [currentDomain]: [] }));
+      // Smart tab selection on initial load:
+      if (!savedCompose?.isComposing) {
+        let lastTab = null;
+        try {
+          lastTab = localStorage.getItem('nick_scribe_active_tab');
+        } catch {}
+
+        if (lastTab && (loaded[lastTab]?.length > 0 || lastTab === 'global' || lastTab === 'all' || lastTab === 'trash')) {
+          setActiveTab(lastTab);
+        } else if (currentDomain && loaded[currentDomain]?.length > 0) {
+          setActiveTab(currentDomain);
+        } else if (loaded.global?.length > 0) {
+          setActiveTab('global');
+        } else if (currentDomain) {
+          setActiveTab(currentDomain);
+        } else {
+          setActiveTab('global');
         }
       }
     });
+
+    return () => { isMounted = false; };
   }, [currentDomain]);
 
-  // Save notebooks on change
+  // Save notebooks on change ONLY AFTER initial load
   useEffect(() => {
+    if (!isNotebooksLoadedRef.current) return;
     saveNotebooks(notebooks);
   }, [notebooks]);
+
+  // Flush any pending auto-save immediately to memory and persistent storage
+  const flushPendingSave = useCallback(() => {
+    if (!isComposingRef.current) return;
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+
+    const title = newNoteTitleRef.current;
+    const content = editorRef.current ? editorRef.current.innerHTML : newNoteContentRef.current;
+    const tab = activeTabRef.current;
+
+    if (!title.trim() && !content.trim()) return;
+
+    let noteId = editingNoteIdRef.current;
+    if (!noteId) {
+      noteId = 'note_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 5);
+      editingNoteIdRef.current = noteId;
+    }
+
+    const currentNotebooks = notebooksRef.current;
+    const currentList = currentNotebooks[tab] || [];
+    const exists = currentList.some(n => n.id === noteId);
+
+    const updatedList = exists
+      ? currentList.map(n => n.id === noteId ? { ...n, title, content, timestamp: Date.now() } : n)
+      : [{ id: noteId, title, content, timestamp: Date.now() }, ...currentList];
+
+    const updatedNotebooks = {
+      ...currentNotebooks,
+      [tab]: updatedList
+    };
+
+    notebooksRef.current = updatedNotebooks;
+    setNotebooks(updatedNotebooks);
+    if (isNotebooksLoadedRef.current) {
+      saveNotebooks(updatedNotebooks);
+    }
+  }, []);
 
   // Live auto-save whenever title or content changes while composing
   useEffect(() => {
     if (!isComposing) return;
 
-    // Immediately persist current composing draft into sessionStorage
+    // Immediately persist current composing draft into both sessionStorage and localStorage
     try {
-      sessionStorage.setItem('nick_scribe_composing_state', JSON.stringify({
+      const draft = JSON.stringify({
         isComposing: true,
         editingNoteId: editingNoteIdRef.current,
         tab: activeTab,
         title: newNoteTitle,
         content: newNoteContent,
         timestamp: Date.now()
-      }));
+      });
+      sessionStorage.setItem('nick_scribe_composing_state', draft);
+      localStorage.setItem('nick_scribe_composing_state', draft);
     } catch {}
 
     // Only auto-save to notebooks if there's actual title or content
@@ -421,33 +602,29 @@ export default function ScribePanel({ onClose, onDockChange }) {
         setEditingNoteId(noteId);
         editingNoteIdRef.current = noteId;
         try {
-          sessionStorage.setItem('nick_scribe_composing_state', JSON.stringify({
+          const draft = JSON.stringify({
             isComposing: true,
             editingNoteId: noteId,
             tab: activeTab,
             title: newNoteTitle,
             content: newNoteContent,
             timestamp: Date.now()
-          }));
+          });
+          sessionStorage.setItem('nick_scribe_composing_state', draft);
+          localStorage.setItem('nick_scribe_composing_state', draft);
         } catch {}
       }
 
       setNotebooks(prev => {
         const currentList = prev[activeTab] || [];
         const exists = currentList.some(n => n.id === noteId);
-        if (exists) {
-          return {
-            ...prev,
-            [activeTab]: currentList.map(n =>
+        const updatedList = exists
+          ? currentList.map(n =>
               n.id === noteId
                 ? { ...n, title: newNoteTitle, content: newNoteContent, timestamp: Date.now() }
                 : n
             )
-          };
-        } else {
-          return {
-            ...prev,
-            [activeTab]: [
+          : [
               {
                 id: noteId,
                 title: newNoteTitle,
@@ -455,9 +632,13 @@ export default function ScribePanel({ onClose, onDockChange }) {
                 timestamp: Date.now()
               },
               ...currentList
-            ]
-          };
-        }
+            ];
+        const next = {
+          ...prev,
+          [activeTab]: updatedList
+        };
+        notebooksRef.current = next;
+        return next;
       });
 
       setSaveStatus('saved');
@@ -468,28 +649,42 @@ export default function ScribePanel({ onClose, onDockChange }) {
     };
   }, [isComposing, newNoteTitle, newNoteContent, activeTab]);
 
-  // Flush composing state on page unload/refresh
+  // Flush composing state on page unload / refresh / browser close
   useEffect(() => {
     const handleBeforeUnload = () => {
       if (isComposingRef.current) {
+        flushPendingSave();
         try {
-          sessionStorage.setItem('nick_scribe_composing_state', JSON.stringify({
+          const draft = JSON.stringify({
             isComposing: true,
             editingNoteId: editingNoteIdRef.current,
             tab: activeTabRef.current,
             title: newNoteTitleRef.current,
             content: newNoteContentRef.current,
             timestamp: Date.now()
-          }));
+          });
+          sessionStorage.setItem('nick_scribe_composing_state', draft);
+          localStorage.setItem('nick_scribe_composing_state', draft);
         } catch {}
       }
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, []);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      if (isComposingRef.current) {
+        flushPendingSave();
+      }
+    };
+  }, [flushPendingSave]);
 
   const handleTabChange = (newTab) => {
+    if (isComposingRef.current) {
+      flushPendingSave();
+    }
     setActiveTab(newTab);
+    try {
+      localStorage.setItem('nick_scribe_active_tab', newTab);
+    } catch {}
     setNewNoteTitle('');
     setNewNoteContent('');
     setEditingNoteId(null);
@@ -497,46 +692,70 @@ export default function ScribePanel({ onClose, onDockChange }) {
     initHistory('', '');
     try {
       sessionStorage.removeItem('nick_scribe_composing_state');
+      localStorage.removeItem('nick_scribe_composing_state');
+    } catch {}
+  };
+
+  const cancelEdit = () => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    setNewNoteTitle('');
+    setNewNoteContent('');
+    setEditingNoteId(null);
+    setIsComposing(false);
+    initHistory('', '');
+    try {
+      sessionStorage.removeItem('nick_scribe_composing_state');
+      localStorage.removeItem('nick_scribe_composing_state');
     } catch {}
   };
 
   const handleAddNote = () => {
-    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
 
-    if (!newNoteTitle.trim() && !newNoteContent.trim()) {
+    const currentTitle = newNoteTitle;
+    const currentContent = editorRef.current ? editorRef.current.innerHTML : newNoteContent;
+
+    if (!currentTitle.trim() && !currentContent.trim()) {
       cancelEdit();
       return;
     }
 
     const noteId = editingNoteIdRef.current || ('note_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 5));
 
-    setNotebooks(prev => {
-      const currentList = prev[activeTab] || [];
-      const exists = currentList.some(n => n.id === noteId);
-      if (exists) {
-        return {
-          ...prev,
-          [activeTab]: currentList.map(n =>
-            n.id === noteId
-              ? { ...n, title: newNoteTitle, content: newNoteContent, timestamp: Date.now() }
-              : n
-          )
-        };
-      } else {
-        return {
-          ...prev,
-          [activeTab]: [
-            {
-              id: noteId,
-              title: newNoteTitle,
-              content: newNoteContent,
-              timestamp: Date.now()
-            },
-            ...currentList
-          ]
-        };
-      }
-    });
+    const currentList = notebooks[activeTab] || [];
+    const exists = currentList.some(n => n.id === noteId);
+    const updatedList = exists
+      ? currentList.map(n =>
+          n.id === noteId
+            ? { ...n, title: currentTitle, content: currentContent, timestamp: Date.now() }
+            : n
+        )
+      : [
+          {
+            id: noteId,
+            title: currentTitle,
+            content: currentContent,
+            timestamp: Date.now()
+          },
+          ...currentList
+        ];
+
+    const updatedNotebooks = {
+      ...notebooks,
+      [activeTab]: updatedList
+    };
+
+    notebooksRef.current = updatedNotebooks;
+    setNotebooks(updatedNotebooks);
+    if (isNotebooksLoadedRef.current) {
+      saveNotebooks(updatedNotebooks);
+    }
 
     setNewNoteTitle('');
     setNewNoteContent('');
@@ -545,6 +764,7 @@ export default function ScribePanel({ onClose, onDockChange }) {
     initHistory('', '');
     try {
       sessionStorage.removeItem('nick_scribe_composing_state');
+      localStorage.removeItem('nick_scribe_composing_state');
     } catch {}
   };
 
@@ -553,6 +773,9 @@ export default function ScribePanel({ onClose, onDockChange }) {
     const targetDomain = (activeTab === 'all' && domain) ? domain : activeTab;
     if (activeTab === 'all' && domain) {
       setActiveTab(domain);
+      try {
+        localStorage.setItem('nick_scribe_active_tab', domain);
+      } catch {}
     }
     setNewNoteTitle(note.title || '');
     setNewNoteContent(note.content || '');
@@ -561,14 +784,16 @@ export default function ScribePanel({ onClose, onDockChange }) {
     setIsComposing(true);
     setSaveStatus('saved');
     try {
-      sessionStorage.setItem('nick_scribe_composing_state', JSON.stringify({
+      const draft = JSON.stringify({
         isComposing: true,
         editingNoteId: note.id,
         tab: targetDomain,
         title: note.title || '',
         content: note.content || '',
         timestamp: Date.now()
-      }));
+      });
+      sessionStorage.setItem('nick_scribe_composing_state', draft);
+      localStorage.setItem('nick_scribe_composing_state', draft);
     } catch {}
   };
 
@@ -934,9 +1159,7 @@ export default function ScribePanel({ onClose, onDockChange }) {
             padding: 0 !important;
           }
           .tbl-info {
-            font-size: 11px !important;
-            color: #8C7A6B !important;
-            margin-left: 8px !important;
+            display: none !important;
           }
         </style>
       </head>
@@ -1047,8 +1270,7 @@ export default function ScribePanel({ onClose, onDockChange }) {
     let html = `<div class="scribe-table-wrap" id="${tableId}" contenteditable="false">`;
     html += '<div class="table-scroll-bar-top" contenteditable="false">';
     html += '<div class="table-scroll-meta table-header-name-row">';
-    html += '<span class="tbl-title-editable" contenteditable="true" data-placeholder="Type table title...">Table</span>';
-    html += `<span class="tbl-info">${rows}×${cols}</span>`;
+    html += '<span class="tbl-title-editable" contenteditable="true" data-placeholder="Table Name">Table Name</span>';
     html += '</div>';
     html += '<div class="table-header-controls-row table-scroll-buttons" contenteditable="false">';
     html += '<div class="table-controls-left">';
@@ -1286,9 +1508,7 @@ export default function ScribePanel({ onClose, onDockChange }) {
     if (wrap) {
       const info = wrap.querySelector('.tbl-info');
       if (info) {
-        const rCount = table.querySelectorAll('tr').length;
-        const cCount = table.querySelector('tr')?.children.length || 0;
-        info.textContent = `${rCount}×${cCount}`;
+        info.remove();
       }
     }
 
@@ -1383,13 +1603,21 @@ export default function ScribePanel({ onClose, onDockChange }) {
       handleTableButtonInteraction(e);
     };
 
+    const onNativeInput = () => {
+      const html = editor.innerHTML;
+      setNewNoteContent(html);
+      pushHistorySnapshot(newNoteTitleRef.current, html, false);
+    };
+
     editor.addEventListener('pointerdown', onNativeEditorPointer, true);
     editor.addEventListener('click', onNativeEditorPointer, true);
+    editor.addEventListener('input', onNativeInput, true);
     return () => {
       editor.removeEventListener('pointerdown', onNativeEditorPointer, true);
       editor.removeEventListener('click', onNativeEditorPointer, true);
+      editor.removeEventListener('input', onNativeInput, true);
     };
-  }, [isComposing]);
+  }, [isComposing, pushHistorySnapshot]);
 
   const handleEditorMouseDown = (e) => {
     // Check if dragging column resizer on table header
@@ -1771,18 +1999,6 @@ export default function ScribePanel({ onClose, onDockChange }) {
     e.target.value = null;
   };
 
-  const cancelEdit = () => {
-    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    setNewNoteTitle('');
-    setNewNoteContent('');
-    initHistory('', '');
-    setEditingNoteId(null);
-    setIsComposing(false);
-    try {
-      sessionStorage.removeItem('nick_scribe_composing_state');
-    } catch {}
-  };
-
   const handleDeleteNote = (tab, id, e) => {
     e?.stopPropagation?.(); // prevent edit trigger
     const noteToDelete = (notebooks[tab] || []).find(n => n.id === id);
@@ -1882,7 +2098,15 @@ export default function ScribePanel({ onClose, onDockChange }) {
               <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><path d="M9 3v18"></path></svg>
             )}
           </button>
-          <button className="mochi-scribe-close-large" onClick={onClose}>
+          <button
+            className="mochi-scribe-close-large"
+            onClick={() => {
+              if (isComposingRef.current) {
+                flushPendingSave();
+              }
+              onClose();
+            }}
+          >
             <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
         </div>
@@ -2011,14 +2235,16 @@ export default function ScribePanel({ onClose, onDockChange }) {
                     setEditingNoteId(null);
                     setSaveStatus('saved');
                     try {
-                      sessionStorage.setItem('nick_scribe_composing_state', JSON.stringify({
+                      const draft = JSON.stringify({
                         isComposing: true,
                         editingNoteId: null,
                         tab: activeTab,
                         title: '',
                         content: '',
                         timestamp: Date.now()
-                      }));
+                      });
+                      sessionStorage.setItem('nick_scribe_composing_state', draft);
+                      localStorage.setItem('nick_scribe_composing_state', draft);
                     } catch {}
                   }}
                 >
@@ -2409,12 +2635,12 @@ export default function ScribePanel({ onClose, onDockChange }) {
                     >
                       <div className="card-rich-header">
                         <h4 className="card-rich-title">
-                          {note.title || (note.content ? note.content.replace(/<[^>]*>?/gm, '').substring(0, 30) + '...' : 'Untitled Note')}
+                          {note.title || (note.content ? (getCleanNotePreview(note.content).substring(0, 30) || 'Untitled Note') + (getCleanNotePreview(note.content).length > 30 ? '...' : '') : 'Untitled Note')}
                         </h4>
                       </div>
                       {note.content && (
                         <div className="card-rich-preview">
-                          {note.content.replace(/<[^>]*>?/gm, ' ').trim().substring(0, 80) || (note.content.includes('<img') ? '📷 [Image attachment]' : '')}
+                          {getCleanNotePreview(note.content)}
                         </div>
                       )}
                       <div className="card-rich-footer">

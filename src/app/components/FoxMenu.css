@@ -2,7 +2,7 @@
   position: absolute;
   bottom: 0px; 
   right: -10px; /* Prevent clipping off the screen edge */
-  width: 340px;
+  width: 418px;
   max-width: calc(100vw - 20px);
   height: 90px;
   z-index: 1000;
@@ -86,7 +86,7 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
   margin-bottom: 6px;
 }
 
